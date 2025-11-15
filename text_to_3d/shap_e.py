@@ -22,7 +22,7 @@ class ShapE(TextTo3D):
         self.seed = seed
         self.guidance = guidance
         self.fp16 = fp16
-        self.device = device
+        self.device = torch.device(device)
         self.model: "ShapE.Model" = None
 
     def init_model(self):
