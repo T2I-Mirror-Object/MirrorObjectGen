@@ -1,1 +1,1 @@
-from .condition_extraction import DepthMap, SegmentationMap
+from .condition_extraction import ConditionMap
