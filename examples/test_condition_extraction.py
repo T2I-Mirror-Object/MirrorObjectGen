@@ -1,5 +1,5 @@
-from scene_composition.pytorch3d_scene_composition import SceneComposition
-from condition_extraction.pytorch3d_condition_extractor import PyTorch3DConditionExtractor
+from scene_composition import SceneComposition
+from condition_extraction import PyTorch3DConditionExtractor
 import os
 
 # Create output directory
