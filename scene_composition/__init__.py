@@ -1,0 +1,1 @@
+from .pytorch3d_scene_composition import SceneComposition
