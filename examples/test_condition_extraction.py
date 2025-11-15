@@ -19,7 +19,7 @@ scene_compositor = SceneComposition(
     mirror_gap_side=2.0,
     mirror_gap_top=2.0,
     mirror_gap_ahead=3.0,
-    device="cpu"
+    device="cuda"
 )
 
 scene = scene_compositor.compose_scene([
