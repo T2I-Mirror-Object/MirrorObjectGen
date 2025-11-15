@@ -272,6 +272,8 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             cull_backfaces=False
         ).to(self.device)
 
+        print("@@@ Debug 1")
+
         # Prepare meshes and IDs
         # Order: objects, mirror, reflections
         all_meshes = []
@@ -287,6 +289,8 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             segment_metadata.append((current_id, 'objects', i, len(scene.get('objects', []))))
             current_id += 1
 
+        print("@@@ Debug 2")
+
         # Add mirror
         for i, mesh in enumerate(scene.get('mirror', [])):
             all_meshes.append(mesh)
@@ -294,12 +298,16 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             segment_metadata.append((current_id, 'mirror', i, len(scene.get('mirror', []))))
             current_id += 1
 
+        print("@@@ Debug 3")
+
         # Add reflections
         for i, mesh in enumerate(scene.get('reflections', [])):
             all_meshes.append(mesh)
             mesh_to_id.append(current_id)
             segment_metadata.append((current_id, 'reflections', i, len(scene.get('reflections', []))))
             current_id += 1
+
+        print("@@@ Debug 4")
 
         # Render instance IDs
         ids = renderer(all_meshes, mesh_to_id=mesh_to_id)  # (N, H, W)
@@ -322,11 +330,15 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
         # Build id_to_rgb mapping
         id_to_rgb = {int(k): tuple(map(int, palette[k])) for k in np.unique(vis)}
 
+        print("@@@ Debug 5")
+
         # Build JSON structure
         output_json = {
             "caption": self.caption or "A scene with objects and their mirror reflections.",
             "segments_info": []
         }
+
+        print("@@@ Debug 6")
 
         if self.seed is not None:
             output_json["seed"] = self.seed
@@ -353,8 +365,12 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
                     segment_total = metadata[3]
                     break
 
+            print("@@@ Debug 7")
+
             # Get description text
             text = self._get_segment_text(segment_type, segment_index, segment_total)
+
+            print("@@@ Debug 8")
 
             output_json["segments_info"].append({
                 "color": color_rgb,
@@ -370,6 +386,8 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
         condition_map = ConditionMap()
         condition_map.image_path = str(image_path)
         condition_map.json_path = str(json_path)
+
+        print("@@@ Debug 9")
 
         return condition_map
 
