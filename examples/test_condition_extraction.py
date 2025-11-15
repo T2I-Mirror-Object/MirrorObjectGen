@@ -19,7 +19,7 @@ scene_compositor = SceneComposition(
     mirror_gap_side=2.0,
     mirror_gap_top=2.0,
     mirror_gap_ahead=3.0,
-    device="cuda"
+    device="cpu"
 )
 
 scene = scene_compositor.compose_scene([
@@ -40,9 +40,9 @@ extractor = PyTorch3DConditionExtractor(
     image_size=(1024, 1024),
     output_dir="results",
     device="cuda",
-    camera_distance=10.0,
-    camera_elevation=5.0,
-    camera_azimuth=150.0,
+    camera_distance=15.0,
+    camera_elevation=20.0,
+    camera_azimuth=0.0,
     fov=60.0,
     faces_per_pixel=1,
     segment_descriptions={
