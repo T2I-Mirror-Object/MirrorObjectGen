@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 class ConditionMap:
     image_path: str
-    json_path: str | None
+    json_path: Optional[str]
 
 class ConditionExtractor(ABC):
     @abstractmethod
