@@ -372,19 +372,3 @@ class SceneComposition:
         }
 
         return scene
-
-
-if __name__ == "__main__":
-    # Example usage
-    scene_composition = SceneComposition(device="cpu")
-    scene = scene_composition.compose_scene([
-        "dog_ahead.glb",
-        "cat_ahead.glb",
-        "lamp.glb",
-        "chair_ahead.glb"
-    ])
-
-    print(f"Scene composition complete!")
-    print(f"Objects: {len(scene['objects'])}")
-    print(f"Mirror frames: {len(scene['mirror'])}")
-    print(f"Reflections: {len(scene['reflections'])}")

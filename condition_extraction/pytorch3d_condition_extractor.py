@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from PIL import Image
 
+from pytorch3d.renderer import look_at_view_transform
 from pytorch3d.renderer.cameras import CamerasBase, FoVPerspectiveCameras
 from pytorch3d.structures import Meshes, join_meshes_as_scene
 from pytorch3d.renderer import RasterizationSettings, MeshRasterizer
@@ -170,17 +171,11 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
 
     def _create_camera(self) -> CamerasBase:
         """Create a camera with specified parameters."""
-        # Convert elevation and azimuth to radians
-        elev_rad = np.deg2rad(self.camera_elevation)
-        azim_rad = np.deg2rad(self.camera_azimuth)
-
-        # Calculate camera position
-        x = self.camera_distance * np.cos(elev_rad) * np.sin(azim_rad)
-        y = self.camera_distance * np.sin(elev_rad)
-        z = self.camera_distance * np.cos(elev_rad) * np.cos(azim_rad)
-
-        R = torch.eye(3).unsqueeze(0)  # Identity rotation (we'll use position)
-        T = torch.tensor([[x, y, z]], dtype=torch.float32)
+        R, T = look_at_view_transform(
+            dist=self.camera_distance,        # distance from the origin
+            elev=self.camera_elevation,       # in degrees
+            azim=self.camera_azimuth,         # in degrees
+        )
 
         camera = FoVPerspectiveCameras(
             device=self.device,
@@ -272,8 +267,6 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             cull_backfaces=False
         ).to(self.device)
 
-        print("@@@ Debug 1")
-
         # Prepare meshes and IDs
         # Order: objects, mirror, reflections
         all_meshes = []
@@ -289,8 +282,6 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             segment_metadata.append((current_id, 'objects', i, len(scene.get('objects', []))))
             current_id += 1
 
-        print("@@@ Debug 2")
-
         # Add mirror
         for i, mesh in enumerate(scene.get('mirror', [])):
             all_meshes.append(mesh)
@@ -298,16 +289,12 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             segment_metadata.append((current_id, 'mirror', i, len(scene.get('mirror', []))))
             current_id += 1
 
-        print("@@@ Debug 3")
-
         # Add reflections
         for i, mesh in enumerate(scene.get('reflections', [])):
             all_meshes.append(mesh)
             mesh_to_id.append(current_id)
             segment_metadata.append((current_id, 'reflections', i, len(scene.get('reflections', []))))
             current_id += 1
-
-        print("@@@ Debug 4")
 
         # Render instance IDs
         ids = renderer(all_meshes, mesh_to_id=mesh_to_id)  # (N, H, W)
@@ -330,15 +317,11 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
         # Build id_to_rgb mapping
         id_to_rgb = {int(k): tuple(map(int, palette[k])) for k in np.unique(vis)}
 
-        print("@@@ Debug 5")
-
         # Build JSON structure
         output_json = {
             "caption": self.caption or "A scene with objects and their mirror reflections.",
             "segments_info": []
         }
-
-        print("@@@ Debug 6")
 
         if self.seed is not None:
             output_json["seed"] = self.seed
@@ -365,12 +348,8 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
                     segment_total = metadata[3]
                     break
 
-            print("@@@ Debug 7")
-
             # Get description text
             text = self._get_segment_text(segment_type, segment_index, segment_total)
-
-            print("@@@ Debug 8")
 
             output_json["segments_info"].append({
                 "color": color_rgb,
@@ -387,41 +366,4 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
         condition_map.image_path = str(image_path)
         condition_map.json_path = str(json_path)
 
-        print("@@@ Debug 9")
-
         return condition_map
-
-
-if __name__ == "__main__":
-    # Example usage
-    from scene_composition.pytorch3d_scene_composition import SceneComposition
-
-    # Create scene
-    scene_compositor = SceneComposition(device="cpu")
-    scene = scene_compositor.compose_scene([
-        "data/dog_ahead.glb",
-        "data/cat_ahead.glb",
-        "data/lamp.glb"
-    ])
-
-    # Extract condition map
-    extractor = PyTorch3DConditionExtractor(
-        image_size=(1024, 1024),
-        output_dir="results",
-        device="cpu",
-        camera_distance=10.0,
-        camera_elevation=15.0,
-        camera_azimuth=0.0,
-        segment_descriptions={
-            'objects': 'Real object in front of the mirror',
-            'mirror': 'The mirror frame',
-            'reflections': 'Reflection visible in the mirror'
-        },
-        caption="A scene with multiple objects and their reflections in a mirror.",
-        seed=42
-    )
-
-    condition_map = extractor.extract_condition_map(scene, output_prefix="scene_segmentation")
-
-    print(f"Segmentation saved to: {condition_map.image_path}")
-    print(f"Metadata saved to: {condition_map.json_path}")
