@@ -40,12 +40,14 @@ class ShapE(TextTo3D):
         if self.model is None:
             self.init_model()
 
+        prompt = text + " facing ahead"
+
         latents = sample_latents(
             batch_size=1,
             model=self.model.model,
             diffusion=self.model.diffusion,
             guidance_scale=self.guidance,
-            model_kwargs=dict(texts=[text]),
+            model_kwargs=dict(texts=[prompt]),
             progress=True,
             clip_denoised=True,
             use_fp16=self.fp16,
@@ -72,13 +74,14 @@ class ShapE(TextTo3D):
     def convert_multiple_texts_to_3d(self, texts: List[str], output_dir: str) -> List[str]:
         if self.model is None:
             self.init_model()
+        prompt = [text + " facing ahead" for text in texts]
 
         latents = sample_latents(
             batch_size=len(texts),
             model=self.model.model,
             diffusion=self.model.diffusion,
             guidance_scale=self.guidance,
-            model_kwargs=dict(texts=texts),
+            model_kwargs=dict(texts=prompt),
             progress=True,
             clip_denoised=True,
             use_fp16=self.fp16,
