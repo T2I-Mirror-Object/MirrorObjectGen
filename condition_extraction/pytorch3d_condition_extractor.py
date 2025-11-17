@@ -130,7 +130,7 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
     def __init__(
         self,
         image_size: Tuple[int, int] = (1024, 1024),
-        output_dir: str = "results",
+        output_dir: str = "results/segmentation",
         device: str = "cpu",
         camera_distance: float = 5.0,
         camera_elevation: float = 0.0,
