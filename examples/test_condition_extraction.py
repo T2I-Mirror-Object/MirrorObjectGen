@@ -23,10 +23,10 @@ scene_compositor = SceneComposition(
 )
 
 object_paths = [
-    "data/dog_ahead.glb",
-    "data/cat_ahead.glb",
-    "data/lamp.glb",
-    "data/chair_ahead.glb"
+    "results/shap_e/a black dog.obj",
+    "results/shap_e/a brown teddy bear.obj",
+    "results/shap_e/a white lamp.obj",
+    "results/shap_e/a red chair.obj",
 ]
 
 scene = scene_compositor.compose_scene(object_paths)
@@ -43,7 +43,7 @@ extractor = PyTorch3DConditionExtractor(
     output_dir="results",
     device="cuda",
     camera_distance=10.0,
-    camera_elevation=0.0,
+    camera_elevation=25.0,
     camera_azimuth=20.0,
     fov=60.0,
     faces_per_pixel=1,
