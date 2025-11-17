@@ -40,7 +40,7 @@ class ShapE(TextTo3D):
         if self.model is None:
             self.init_model()
 
-        prompt = text + " facing ahead"
+        prompt = text + " is ahead"
 
         latents = sample_latents(
             batch_size=1,
@@ -74,7 +74,7 @@ class ShapE(TextTo3D):
     def convert_multiple_texts_to_3d(self, texts: List[str], output_dir: str) -> List[str]:
         if self.model is None:
             self.init_model()
-        prompt = [text + " facing ahead" for text in texts]
+        prompt = [text + " is ahead" for text in texts]
 
         latents = sample_latents(
             batch_size=len(texts),
