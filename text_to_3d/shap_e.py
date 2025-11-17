@@ -2,7 +2,10 @@ from text_to_3d.text_to_3d import TextTo3D
 from typing import List
 
 import torch
-import os, gc
+import os
+import numpy as np
+import trimesh
+from trimesh import transformations
 
 from shap_e.diffusion.sample import sample_latents
 from shap_e.diffusion.gaussian_diffusion import diffusion_from_config
@@ -18,11 +21,12 @@ class ShapE(TextTo3D):
             self.diffusion = diffusion
             self.xm = xm
 
-    def __init__(self, seed: int = 42, guidance: float = 10.0, fp16: bool = True, device: str = "cuda"):
+    def __init__(self, seed: int = 42, guidance: float = 10.0, fp16: bool = True, device: str = "cuda", orientation: List[float] = [0.0, 0.0, 0.0]):
         self.seed = seed
         self.guidance = guidance
         self.fp16 = fp16
         self.device = torch.device(device)
+        self.orientation = orientation  # [rotation_x, rotation_y, rotation_z] in degrees
         self.model: "ShapE.Model" = None
 
     def init_model(self):
@@ -40,14 +44,12 @@ class ShapE(TextTo3D):
         if self.model is None:
             self.init_model()
 
-        prompt = text + " is ahead"
-
         latents = sample_latents(
             batch_size=1,
             model=self.model.model,
             diffusion=self.model.diffusion,
             guidance_scale=self.guidance,
-            model_kwargs=dict(texts=[prompt]),
+            model_kwargs=dict(texts=[text]),
             progress=True,
             clip_denoised=True,
             use_fp16=self.fp16,
@@ -59,14 +61,37 @@ class ShapE(TextTo3D):
             device=self.device,
         )
 
-        # Decode to a triangle mesh and write to disk
+        # Decode to a triangle mesh
         tri = decode_latent_mesh(self.model.xm, latents[0]).tri_mesh()
 
         obj_path = os.path.join(output_dir, f"{text}.obj")
         os.makedirs(output_dir, exist_ok=True)
 
-        with open(obj_path, "w") as f:
-            tri.write_obj(f)
+        # Convert shap-e mesh to trimesh directly
+        # Access vertices and faces from the shap-e tri_mesh object
+        vertices = tri.verts.cpu().numpy() if hasattr(tri.verts, 'cpu') else tri.verts.numpy()
+        faces = tri.faces.cpu().numpy() if hasattr(tri.faces, 'cpu') else tri.faces.numpy()
+        
+        # Create trimesh object
+        mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+        
+        # Apply rotation if orientation is specified
+        if any(angle != 0.0 for angle in self.orientation):
+            # Convert degrees to radians and create rotation matrix from Euler angles (x, y, z order)
+            # orientation: [rotation_x, rotation_y, rotation_z] in degrees
+            rotation_x_rad = np.deg2rad(self.orientation[0])
+            rotation_y_rad = np.deg2rad(self.orientation[1])
+            rotation_z_rad = np.deg2rad(self.orientation[2])
+            rotation_matrix = transformations.euler_matrix(
+                rotation_x_rad,  # rotation around x-axis
+                rotation_y_rad,  # rotation around y-axis
+                rotation_z_rad,  # rotation around z-axis
+                axes='xyz'
+            )
+            mesh.apply_transform(rotation_matrix)
+        
+        # Export the rotated mesh
+        mesh.export(obj_path)
 
         return obj_path
             
@@ -74,14 +99,13 @@ class ShapE(TextTo3D):
     def convert_multiple_texts_to_3d(self, texts: List[str], output_dir: str) -> List[str]:
         if self.model is None:
             self.init_model()
-        prompt = [text + " is ahead" for text in texts]
 
         latents = sample_latents(
             batch_size=len(texts),
             model=self.model.model,
             diffusion=self.model.diffusion,
             guidance_scale=self.guidance,
-            model_kwargs=dict(texts=prompt),
+            model_kwargs=dict(texts=texts),
             progress=True,
             clip_denoised=True,
             use_fp16=self.fp16,
@@ -93,14 +117,38 @@ class ShapE(TextTo3D):
             device=self.device,
         )
 
-        # Decode to a triangle mesh and write to disk
+        # Decode to triangle meshes
         tris = [decode_latent_mesh(self.model.xm, latents[i]).tri_mesh() for i in range(len(texts))]
 
         obj_paths = [os.path.join(output_dir, f"{texts[i]}.obj") for i in range(len(texts))]
         os.makedirs(output_dir, exist_ok=True)
 
+        # Apply rotation to each mesh
         for i in range(len(texts)):
-            with open(obj_paths[i], "w") as f:
-                tris[i].write_obj(f)
+            # Convert shap-e mesh to trimesh directly
+            # Access vertices and faces from the shap-e tri_mesh object
+            vertices = tris[i].verts.cpu().numpy() if hasattr(tris[i].verts, 'cpu') else tris[i].verts.numpy()
+            faces = tris[i].faces.cpu().numpy() if hasattr(tris[i].faces, 'cpu') else tris[i].faces.numpy()
+            
+            # Create trimesh object
+            mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+            
+            # Apply rotation if orientation is specified
+            if any(angle != 0.0 for angle in self.orientation):
+                # Convert degrees to radians and create rotation matrix from Euler angles (x, y, z order)
+                # orientation: [rotation_x, rotation_y, rotation_z] in degrees
+                rotation_x_rad = np.deg2rad(self.orientation[0])
+                rotation_y_rad = np.deg2rad(self.orientation[1])
+                rotation_z_rad = np.deg2rad(self.orientation[2])
+                rotation_matrix = transformations.euler_matrix(
+                    rotation_x_rad,  # rotation around x-axis
+                    rotation_y_rad,  # rotation around y-axis
+                    rotation_z_rad,  # rotation around z-axis
+                    axes='xyz'
+                )
+                mesh.apply_transform(rotation_matrix)
+            
+            # Export the rotated mesh
+            mesh.export(obj_paths[i])
 
         return obj_paths
