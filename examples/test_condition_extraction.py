@@ -22,12 +22,14 @@ scene_compositor = SceneComposition(
     device="cuda"
 )
 
-scene = scene_compositor.compose_scene([
+object_paths = [
     "data/dog_ahead.glb",
     "data/cat_ahead.glb",
     "data/lamp.glb",
     "data/chair_ahead.glb"
-])
+]
+
+scene = scene_compositor.compose_scene(object_paths)
 
 print(f"  ✓ Scene created with:")
 print(f"    - {len(scene['objects'])} objects")
@@ -50,17 +52,14 @@ extractor = PyTorch3DConditionExtractor(
         'mirror': 'The mirror frame surrounding the reflective surface',
         'reflections': 'A reflection of the object visible inside the mirror'
     },
-    caption=(
-        "A scene with multiple objects and their reflections in a mirror. "
-        "The objects are arranged in front of a framed mirror, and their "
-        "reflections are clearly visible within the mirror surface."
-    ),
+    caption=None,  # Let it auto-generate from object names
     seed=42
 )
 
 condition_map = extractor.extract_condition_map(
     scene,
-    output_prefix="scene_segmentation"
+    output_prefix="scene_segmentation",
+    object_paths=object_paths
 )
 
 print(f"  ✓ Segmentation map saved to: {condition_map.image_path}")

@@ -210,7 +210,26 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             table[k] = base[(k - 1) % len(base)]  # wrap if >20 IDs
         return table
 
-    def _get_segment_text(self, segment_type: str, index: int, total: int) -> str:
+    def _extract_object_name(self, file_path: str) -> str:
+        """
+        Extract a clean object name from a file path.
+        
+        Args:
+            file_path: Path to the object file (e.g., "data/dog_ahead.glb")
+            
+        Returns:
+            Clean object name (e.g., "dog")
+        """
+        path = Path(file_path)
+        # Get filename without extension
+        name = path.stem
+        # Remove common suffixes like "_ahead", "_front", etc.
+        name = name.replace("_ahead", "").replace("_front", "").replace("_back", "")
+        name = name.replace("_side", "").replace("_top", "").replace("_bottom", "")
+        # Capitalize first letter
+        return name.capitalize()
+
+    def _get_segment_text(self, segment_type: str, index: int, total: int, object_name: Optional[str] = None) -> str:
         """
         Generate description text for a segment.
 
@@ -218,32 +237,39 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             segment_type: Type of segment ('objects', 'mirror', 'reflections')
             index: Index within the segment type
             total: Total number of segments of this type
+            object_name: Optional name of the object (for objects and reflections)
 
         Returns:
             Description string
         """
-        if segment_type in self.segment_descriptions:
-            base_desc = self.segment_descriptions[segment_type]
-            if total > 1:
-                return f"{base_desc} (item {index + 1} of {total})"
-            return base_desc
-        else:
-            # Default descriptions
-            if segment_type == "objects":
+        if segment_type == "objects":
+            if object_name:
+                if total > 1:
+                    return f"{object_name} standing in front of the mirror"
+                return f"{object_name} standing in front of the mirror"
+            else:
                 if total > 1:
                     return f"Real object {index + 1} standing in front of the mirror."
                 return "Real object standing in front of the mirror."
-            elif segment_type == "mirror":
-                return "The mirror frame surrounding the reflective surface."
-            elif segment_type == "reflections":
+        elif segment_type == "mirror":
+            return "The mirror frame surrounding the reflective surface."
+        elif segment_type == "reflections":
+            if object_name:
+                if total > 1:
+                    return f"The reflection of {object_name} visible inside the mirror"
+                return f"The reflection of {object_name} visible inside the mirror"
+            else:
                 if total > 1:
                     return f"Reflection {index + 1} of the object visible inside the mirror."
                 return "Reflection of the object visible inside the mirror."
-            else:
-                return f"Segment of type {segment_type}, index {index}."
+        else:
+            if object_name:
+                return f"{object_name} (segment of type {segment_type}, index {index})"
+            return f"Segment of type {segment_type}, index {index}."
 
     def extract_condition_map(self, scene: Dict[str, List[Meshes]],
-                              output_prefix: str = "segmentation") -> ConditionMap:
+                              output_prefix: str = "segmentation",
+                              object_paths: Optional[List[str]] = None) -> ConditionMap:
         """
         Extract segmentation map and metadata from a scene.
 
@@ -251,6 +277,8 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             scene: Dictionary with keys 'objects', 'mirror', 'reflections',
                    each containing a list of Meshes
             output_prefix: Prefix for output files
+            object_paths: Optional list of file paths corresponding to objects in scene['objects'].
+                         Used to extract object names for captions and segment descriptions.
 
         Returns:
             ConditionMap with paths to image and JSON files
@@ -267,33 +295,45 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             cull_backfaces=False
         ).to(self.device)
 
+        # Extract object names from paths if provided
+        object_names = []
+        if object_paths:
+            object_names = [self._extract_object_name(path) for path in object_paths]
+        else:
+            object_names = [None] * len(scene.get('objects', []))
+
         # Prepare meshes and IDs
         # Order: objects, mirror, reflections
         all_meshes = []
         mesh_to_id = []
-        segment_metadata = []  # Store (id, type, index_in_type) for later
+        segment_metadata = []  # Store (id, type, index_in_type, object_name) for later
 
         current_id = 1
 
         # Add objects
-        for i, mesh in enumerate(scene.get('objects', [])):
+        objects_list = scene.get('objects', [])
+        for i, mesh in enumerate(objects_list):
             all_meshes.append(mesh)
             mesh_to_id.append(current_id)
-            segment_metadata.append((current_id, 'objects', i, len(scene.get('objects', []))))
+            obj_name = object_names[i] if i < len(object_names) else None
+            segment_metadata.append((current_id, 'objects', i, len(objects_list), obj_name))
             current_id += 1
 
         # Add mirror
         for i, mesh in enumerate(scene.get('mirror', [])):
             all_meshes.append(mesh)
             mesh_to_id.append(current_id)
-            segment_metadata.append((current_id, 'mirror', i, len(scene.get('mirror', []))))
+            segment_metadata.append((current_id, 'mirror', i, len(scene.get('mirror', [])), None))
             current_id += 1
 
-        # Add reflections
-        for i, mesh in enumerate(scene.get('reflections', [])):
+        # Add reflections (match with corresponding objects)
+        reflections_list = scene.get('reflections', [])
+        for i, mesh in enumerate(reflections_list):
             all_meshes.append(mesh)
             mesh_to_id.append(current_id)
-            segment_metadata.append((current_id, 'reflections', i, len(scene.get('reflections', []))))
+            # Reflection i corresponds to object i
+            obj_name = object_names[i] if i < len(object_names) else None
+            segment_metadata.append((current_id, 'reflections', i, len(reflections_list), obj_name))
             current_id += 1
 
         # Render instance IDs
@@ -317,9 +357,26 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
         # Build id_to_rgb mapping
         id_to_rgb = {int(k): tuple(map(int, palette[k])) for k in np.unique(vis)}
 
+        # Generate caption with object names
+        if self.caption:
+            caption = self.caption
+        else:
+            # Build caption from object names
+            if object_names and any(name for name in object_names):
+                valid_names = [name for name in object_names if name]
+                if len(valid_names) == 1:
+                    caption = f"A scene with a {valid_names[0].lower()} and its reflection in a mirror."
+                elif len(valid_names) == 2:
+                    caption = f"A scene with a {valid_names[0].lower()} and a {valid_names[1].lower()} and their reflections in a mirror."
+                else:
+                    names_str = ", ".join([name.lower() for name in valid_names[:-1]])
+                    caption = f"A scene with {names_str}, and a {valid_names[-1].lower()} and their reflections in a mirror."
+            else:
+                caption = "A scene with objects and their mirror reflections."
+
         # Build JSON structure
         output_json = {
-            "caption": self.caption or "A scene with objects and their mirror reflections.",
+            "caption": caption,
             "segments_info": []
         }
 
@@ -340,16 +397,18 @@ class PyTorch3DConditionExtractor(ConditionExtractor):
             segment_type = "unknown"
             segment_index = 0
             segment_total = 1
+            object_name = None
 
             for metadata in segment_metadata:
                 if metadata[0] == inst_id:
                     segment_type = metadata[1]
                     segment_index = metadata[2]
                     segment_total = metadata[3]
+                    object_name = metadata[4] if len(metadata) > 4 else None
                     break
 
             # Get description text
-            text = self._get_segment_text(segment_type, segment_index, segment_total)
+            text = self._get_segment_text(segment_type, segment_index, segment_total, object_name)
 
             output_json["segments_info"].append({
                 "color": color_rgb,
