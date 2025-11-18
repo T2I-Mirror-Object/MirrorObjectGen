@@ -1,5 +1,12 @@
 results/
 shap_e_model_cache/
+
+Seg2Any/ckpt
+Seg2Any/data
+Seg2Any/result
+
+*.log
+*.pkl
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
