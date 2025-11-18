@@ -2,9 +2,6 @@ from text_parser.text_parser_impl import TextParserImpl
 from text_to_3d.shap_e import ShapE
 from scene_composition.pytorch3d_scene_composition import SceneComposition
 from condition_extraction import PyTorch3DConditionExtractor
-from pytorch3d.io import save_obj
-from pytorch3d.structures import join_meshes_as_scene
-import torch
 import os
 
 os.makedirs("results", exist_ok=True)
