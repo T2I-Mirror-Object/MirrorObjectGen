@@ -69,8 +69,8 @@ class ShapE(TextTo3D):
 
         # Convert shap-e mesh to trimesh directly
         # Access vertices and faces from the shap-e tri_mesh object
-        vertices = tri.verts.cpu().numpy() if hasattr(tri.verts, 'cpu') else tri.verts.numpy()
-        faces = tri.faces.cpu().numpy() if hasattr(tri.faces, 'cpu') else tri.faces.numpy()
+        vertices = tri.verts
+        faces = tri.faces
         
         # Create trimesh object
         mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
@@ -127,8 +127,8 @@ class ShapE(TextTo3D):
         for i in range(len(texts)):
             # Convert shap-e mesh to trimesh directly
             # Access vertices and faces from the shap-e tri_mesh object
-            vertices = tris[i].verts.cpu().numpy() if hasattr(tris[i].verts, 'cpu') else tris[i].verts.numpy()
-            faces = tris[i].faces.cpu().numpy() if hasattr(tris[i].faces, 'cpu') else tris[i].faces.numpy()
+            vertices = tris[i].verts
+            faces = tris[i].faces
             
             # Create trimesh object
             mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
@@ -144,7 +144,6 @@ class ShapE(TextTo3D):
                     rotation_x_rad,  # rotation around x-axis
                     rotation_y_rad,  # rotation around y-axis
                     rotation_z_rad,  # rotation around z-axis
-                    axes='xyz'
                 )
                 mesh.apply_transform(rotation_matrix)
             
