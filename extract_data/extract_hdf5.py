@@ -78,6 +78,6 @@ def extract_first_hdf5_from_all_directories(base_path: str, output_base_path: st
 if __name__ == "__main__":
     # Extract from all directories
     base_path = "/Users/xuanbachmai/CS/DeepLearning/hf-objaverse-v4"
-    output_path = "result"
+    output_path = "dataset"
     
     extract_first_hdf5_from_all_directories(base_path, output_path)
