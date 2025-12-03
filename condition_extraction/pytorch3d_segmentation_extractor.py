@@ -122,7 +122,7 @@ class InstanceIDRenderer(nn.Module):
         return ids
 
 
-class PyTorch3DConditionExtractor(ConditionExtractor):
+class PyTorch3DSegmentationExtractor(ConditionExtractor):
     """
     Extract segmentation maps and metadata from PyTorch3D scenes.
     """

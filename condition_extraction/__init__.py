@@ -1,2 +1,1 @@
-from .condition_extractor import ConditionMap, ConditionExtractor
-from .pytorch3d_condition_extractor import PyTorch3DConditionExtractor
+from .pytorch3d_segmentation_extractor import PyTorch3DSegmentationExtractor

@@ -1,7 +1,7 @@
 from text_parser.text_parser_impl import TextParserImpl
 from text_to_3d.shap_e import ShapE
 from scene_composition.pytorch3d_scene_composition import SceneComposition
-from condition_extraction import PyTorch3DConditionExtractor
+from condition_extraction import PyTorch3DSegmentationExtractor
 import os
 
 os.makedirs("results", exist_ok=True)
@@ -43,7 +43,7 @@ print(f"    - {len(scene['mirror'])} mirror frame")
 print(f"    - {len(scene['reflections'])} reflections")
 
 print("\nExtracting segmentation map and metadata...")
-extractor = PyTorch3DConditionExtractor(
+extractor = PyTorch3DSegmentationExtractor(
     image_size=(1024, 1024),
     output_dir="results/segmentation",
     device="cuda",
