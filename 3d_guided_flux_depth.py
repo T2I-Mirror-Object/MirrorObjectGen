@@ -13,6 +13,24 @@ parser.add_argument(
     default="a teddy bear in front of the mirror",
     help='Text prompt describing the scene (e.g., "a teddy bear in front of the mirror")'
 )
+parser.add_argument(
+    '--camera-distance',
+    type=float,
+    default=5.0,
+    help='Distance of camera from origin (default: 5.0)'
+)
+parser.add_argument(
+    '--camera-elevation',
+    type=float,
+    default=25.0,
+    help='Camera elevation angle in degrees (default: 25.0)'
+)
+parser.add_argument(
+    '--camera-azimuth',
+    type=float,
+    default=10.0,
+    help='Camera azimuth angle in degrees (default: 10.0)'
+)
 args = parser.parse_args()
 
 os.makedirs("results", exist_ok=True)
@@ -61,9 +79,9 @@ extractor = PyTorch3DDepthExtractor(
     image_size=(1024, 1024),
     output_dir="results/depth",
     device="cuda",
-    camera_distance=5.0,
-    camera_elevation=25.0,
-    camera_azimuth=10.0,
+    camera_distance=args.camera_distance,
+    camera_elevation=args.camera_elevation,
+    camera_azimuth=args.camera_azimuth,
     fov=60.0,
     faces_per_pixel=1,
     normalize=True,
