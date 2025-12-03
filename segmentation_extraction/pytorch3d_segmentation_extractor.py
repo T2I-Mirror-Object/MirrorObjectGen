@@ -11,7 +11,7 @@ from pytorch3d.renderer.cameras import CamerasBase, FoVPerspectiveCameras
 from pytorch3d.structures import Meshes, join_meshes_as_scene
 from pytorch3d.renderer import RasterizationSettings, MeshRasterizer
 
-from condition_extraction.condition_extractor import ConditionExtractor, ConditionMap
+from segmentation_extraction.segmentation_extractor import SegmentationExtractor, SegmentationMap
 
 
 class InstanceIDRenderer(nn.Module):
@@ -122,7 +122,7 @@ class InstanceIDRenderer(nn.Module):
         return ids
 
 
-class PyTorch3DSegmentationExtractor(ConditionExtractor):
+class PyTorch3DSegmentationExtractor(SegmentationExtractor):
     """
     Extract segmentation maps and metadata from PyTorch3D scenes.
     """

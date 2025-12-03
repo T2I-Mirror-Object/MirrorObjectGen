@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-class ConditionMap:
+class SegmentationMap:
     image_path: str
     json_path: Optional[str]
 
-class ConditionExtractor(ABC):
+class SegmentationExtractor(ABC):
     @abstractmethod
-    def extract_condition_map(self, scene) -> ConditionMap:
+    def extract_segmentation_map(self, scene) -> SegmentationMap:
         """
-        Return a condition map for the scene.
+        Return a segmentation map for the scene.
         """
         raise NotImplementedError("Needs to be implemented by subclass")
