@@ -3,11 +3,25 @@ from text_to_3d.shap_e import ShapE
 from scene_composition.pytorch3d_scene_composition import SceneComposition
 from segmentation_extraction.pytorch3d_segmentation_extractor import PyTorch3DSegmentationExtractor
 import os
+import argparse
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Generate 3D scene with mirror reflections from text prompt')
+parser.add_argument(
+    '--prompt',
+    type=str,
+    default="a teddy bear in front of the mirror",
+    help='Text prompt describing the scene (e.g., "a teddy bear in front of the mirror")'
+)
+args = parser.parse_args()
 
 os.makedirs("results", exist_ok=True)
 
 text_parser = TextParserImpl()
-text = "a teddy bear in front of the mirror"
+text = args.prompt
+
+print(f"Processing prompt: {text}")
+print("=" * 60)
 
 obj_name_list = text_parser.parse(text)
 
