@@ -31,11 +31,19 @@ class LGMFull(TextTo3D):
         # It seems the second argument is for image, passing None implies text-to-3d
         result = self.lgm_pipe(text, None)
         
+        # Ensure output_dir is absolute
+        output_dir = os.path.abspath(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         ply_path = os.path.join(output_dir, f"{text.replace(' ', '_')}.ply")
         
+        print(f"Saving to: {ply_path}")
+        
         # Save using the pipeline's method
-        self.lgm_pipe.save_ply(result, ply_path)
+        try:
+            self.lgm_pipe.save_ply(result, ply_path)
+        except Exception as e:
+            print(f"Error saving PLY to {ply_path}: {e}")
+            raise e
 
         return ply_path
 

@@ -54,42 +54,69 @@ class PointCloudSceneComposition(SceneComposition):
                     raise e
         return pcls
 
-    def _get_mesh_bounds(self, pcl: Pointclouds) -> torch.Tensor:
-        """Get bounding box of a point cloud."""
-        # Pointclouds.get_bounding_boxes() returns (N, 3, 2) -> (min, max)
-        # We want [min, max] which is (2, 3)
-        bbox = pcl.get_bounding_boxes()[0].t() # (3, 2) -> (2, 3) if we transpose? 
-        # Wait, get_bounding_boxes returns (N, 3, 2) where last dim is (min, max).
-        # So bbox[0] is (3, 2). Transpose gives (2, 3) -> [min_vec, max_vec]
-        return bbox.t()
+    def _get_mesh_bounds(self, obj) -> torch.Tensor:
+        """Get bounding box of a point cloud or mesh."""
+        if isinstance(obj, Meshes):
+            verts = obj.verts_packed()
+            min_bounds = verts.min(dim=0)[0]
+            max_bounds = verts.max(dim=0)[0]
+            return torch.stack([min_bounds, max_bounds])
+        elif isinstance(obj, Pointclouds):
+            # Pointclouds.get_bounding_boxes() returns (N, 3, 2) -> (min, max)
+            # We want [min, max] which is (2, 3)
+            bbox = obj.get_bounding_boxes()[0].t() 
+            return bbox
+        else:
+            raise TypeError(f"Unsupported type: {type(obj)}")
 
-    def _get_mesh_centroid(self, pcl: Pointclouds) -> torch.Tensor:
-        """Get centroid of a point cloud."""
-        return pcl.points_packed().mean(dim=0)
+    def _get_mesh_centroid(self, obj) -> torch.Tensor:
+        """Get centroid of a point cloud or mesh."""
+        if isinstance(obj, Meshes):
+            verts = obj.verts_packed()
+            return verts.mean(dim=0)
+        elif isinstance(obj, Pointclouds):
+            return obj.points_packed().mean(dim=0)
+        else:
+            raise TypeError(f"Unsupported type: {type(obj)}")
 
-    def _apply_translation(self, pcl: Pointclouds, translation: torch.Tensor) -> Pointclouds:
-        """Apply translation to a point cloud."""
-        points = pcl.points_packed()
-        new_points = points + translation
-        return Pointclouds(points=[new_points], features=pcl.features_list())
+    def _apply_translation(self, obj, translation: torch.Tensor):
+        """Apply translation to a point cloud or mesh."""
+        if isinstance(obj, Meshes):
+            verts = obj.verts_packed()
+            new_verts = verts + translation
+            return Meshes(verts=[new_verts], faces=obj.faces_list())
+        elif isinstance(obj, Pointclouds):
+            points = obj.points_packed()
+            new_points = points + translation
+            return Pointclouds(points=[new_points], features=obj.features_list())
+        else:
+            raise TypeError(f"Unsupported type: {type(obj)}")
 
-    def _apply_transform(self, pcl: Pointclouds, transform_matrix: torch.Tensor) -> Pointclouds:
+    def _apply_transform(self, obj, transform_matrix: torch.Tensor):
         """Apply 4x4 transformation matrix."""
-        # Not strictly needed if we only use translation and rotation separately, 
-        # but good to have.
-        points = pcl.points_packed()
-        ones = torch.ones((points.shape[0], 1), device=self.device)
-        points_homo = torch.cat([points, ones], dim=1)
-        new_points_homo = torch.matmul(points_homo, transform_matrix.t())
-        new_points = new_points_homo[:, :3]
-        return Pointclouds(points=[new_points], features=pcl.features_list())
+        if isinstance(obj, Meshes):
+            verts = obj.verts_packed()
+            ones = torch.ones((verts.shape[0], 1), device=self.device)
+            verts_homo = torch.cat([verts, ones], dim=1)
+            new_verts_homo = torch.matmul(verts_homo, transform_matrix.t())
+            new_verts = new_verts_homo[:, :3]
+            return Meshes(verts=[new_verts], faces=obj.faces_list())
+        elif isinstance(obj, Pointclouds):
+            points = obj.points_packed()
+            ones = torch.ones((points.shape[0], 1), device=self.device)
+            points_homo = torch.cat([points, ones], dim=1)
+            new_points_homo = torch.matmul(points_homo, transform_matrix.t())
+            new_points = new_points_homo[:, :3]
+            return Pointclouds(points=[new_points], features=obj.features_list())
+        else:
+            raise TypeError(f"Unsupported type: {type(obj)}")
 
-    def _put_single_object_on_plane_xz(self, pcl: Pointclouds) -> Pointclouds:
+    def _put_single_object_on_plane_xz(self, obj):
         """Place object on XZ plane."""
-        bounds = self._get_mesh_bounds(pcl)
+        bounds = self._get_mesh_bounds(obj)
         min_y = bounds[0, 1]
         translation = torch.tensor([0.0, -min_y, 0.0], device=self.device)
-        return self._apply_translation(pcl, translation)
+        return self._apply_translation(obj, translation)
     
     # _put_objects_on_plane_xz, _shift_objects_to_center, _put_objects_next_to_each_other
     # reuse the logic but call the overridden methods.
