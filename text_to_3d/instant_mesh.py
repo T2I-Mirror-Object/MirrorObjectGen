@@ -64,34 +64,12 @@ class InstantMesh(TextTo3D):
 
         if self.instant_mesh_model is None:
             print("Loading InstantMesh model...")
-            # We need the config file. The notebook says 'configs/instant-mesh-base.yaml'.
-            # We should probably check if it exists or create it/download it.
-            # Since I cannot see the configs folder, I'll assume I might need to define the config or it's there.
-            # The user didn't mention the configs folder.
-            # However, `instantiate_from_config` needs a config dict.
-            # I will try to locate the config or define a minimal one if possible, 
-            # but usually these are complex.
-            # Let's assume the user put the config in `text_to_3d/instant_mesh_utils` or root?
-            # The notebook uses `configs/instant-mesh-base.yaml`.
-            # I will assume the user has this file in the root or I should download/create it.
-            # For now, let's assume it's in `d:\APCSThesisCode\MirrorObjectGen\configs\instant-mesh-base.yaml`
-            # If not, I might fail.
             
-            # Wait, the notebook downloads the checkpoint:
-            # model_ckpt_path = hf_hub_download(repo_id="TencentARC/InstantMesh", filename="instant_mesh_base.ckpt", repo_type="model")
-            
-            # I'll check for the config file in the next step if this fails, but let's try to find it.
-            # Actually, I can embed the config if it's small, but it's likely large.
-            # Let's assume it's available or I can download it.
-            # For robustness, I will try to download the config from the repo if not found?
-            # Or better, I will assume the user provided it as they provided the utils.
-            
+            # User confirmed configs/instant-mesh-base.yaml exists in the repo
             config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "instant-mesh-base.yaml")
+            
             if not os.path.exists(config_path):
-                 # Fallback: try to find it or define it. 
-                 # Since I can't easily define it, I'll assume it's there or fail with a clear message.
-                 print(f"Warning: Config not found at {config_path}. Attempting to use default path.")
-                 config_path = "configs/instant-mesh-base.yaml"
+                 raise FileNotFoundError(f"Config not found at {config_path}")
 
             config = OmegaConf.load(config_path)
             model_config = config.model_config
