@@ -76,7 +76,9 @@ class PyTorch3DDepthExtractor(DepthExtractor):
         self,
         scene: Dict[str, List[Meshes]],
         output_prefix: str = "depth",
-        object_paths: Optional[List[str]] = None
+        object_paths: Optional[List[str]] = None,
+        camera_params: Optional[Tuple[float, float, float]] = None,
+        cameras: Optional[CamerasBase] = None
     ) -> DepthMap:
         """
         Extract depth map from a scene.
@@ -86,12 +88,26 @@ class PyTorch3DDepthExtractor(DepthExtractor):
                    each containing a list of Meshes
             output_prefix: Prefix for output files
             object_paths: Optional list of file paths (for compatibility, not used)
+            camera_params: Optional tuple of (distance, elevation, azimuth) to override defaults
+            cameras: Optional pre-configured CamerasBase object to use directly
 
         Returns:
             DepthMap with path to depth image
         """
         # Create camera
-        camera = self._create_camera()
+        if cameras is not None:
+             camera = cameras
+        elif camera_params is not None:
+            dist, elev, azim = camera_params
+            R, T = look_at_view_transform(dist, elev, azim)
+            camera = FoVPerspectiveCameras(
+                device=self.device, 
+                R=R, 
+                T=T, 
+                fov=self.fov
+            )
+        else:
+            camera = self._create_camera()
 
         # Create rasterizer with robust settings
         raster_settings = RasterizationSettings(
@@ -179,18 +195,11 @@ class PyTorch3DDepthExtractor(DepthExtractor):
         self,
         scene: Dict[str, List[Meshes]],
         output_prefix: str = "depth",
-        object_paths: Optional[List[str]] = None
+        object_paths: Optional[List[str]] = None,
+        camera_params: Optional[Tuple[float, float, float]] = None,
+        cameras: Optional[CamerasBase] = None
     ) -> DepthMap:
         """
         Alias for extract_depth_map for compatibility with existing code.
-        
-        Args:
-            scene: Dictionary with keys 'objects', 'mirror', 'reflections',
-                   each containing a list of Meshes
-            output_prefix: Prefix for output files
-            object_paths: Optional list of file paths (for compatibility)
-
-        Returns:
-            DepthMap with path to depth image
         """
-        return self.extract_depth_map(scene, output_prefix, object_paths)
+        return self.extract_depth_map(scene, output_prefix, object_paths, camera_params, cameras)
