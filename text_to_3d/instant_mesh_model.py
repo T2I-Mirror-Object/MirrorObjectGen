@@ -3,26 +3,39 @@ import numpy as np
 import os
 import sys
 from PIL import Image
-from typing import List
+from typing import List, Tuple
 from diffusers import DiffusionPipeline, EulerAncestralDiscreteScheduler
 from huggingface_hub import hf_hub_download
 from omegaconf import OmegaConf
 from einops import rearrange
 import tempfile
 import rembg
+from torchvision.transforms import v2
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Add InstantMesh submodule to path so 'src' can be imported
+INSTANT_MESH_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'InstantMesh'))
+if INSTANT_MESH_ROOT not in sys.path:
+    sys.path.append(INSTANT_MESH_ROOT)
+
 from text_to_3d.text_to_3d import TextTo3D
-from text_to_3d.instant_mesh.src.utils.infer_util import remove_background, resize_foreground
-from text_to_3d.instant_mesh.src.utils.train_util import instantiate_from_config
-from text_to_3d.instant_mesh.src.utils.camera_util import (
-    FOV_to_intrinsics, 
-    get_zero123plus_input_cameras,
-    get_circular_camera_poses
-)
-from text_to_3d.instant_mesh.src.utils.mesh_util import save_obj_with_mtl
+
+# Try importing from src (InstantMesh submodule)
+try:
+    from src.utils.train_util import instantiate_from_config
+    from src.utils.camera_util import (
+        FOV_to_intrinsics, 
+        get_zero123plus_input_cameras,
+        get_circular_camera_poses
+    )
+    from src.utils.mesh_util import save_obj_with_mtl
+    from src.utils.infer_util import remove_background, resize_foreground
+except ImportError as e:
+    print(f"Error importing from InstantMesh submodule: {e}")
+    print(f"sys.path: {sys.path}")
+    raise e
 
 class InstantMesh(TextTo3D):
     def __init__(self, device: str = "cuda", guidance_scale: float = 7.5):
@@ -33,6 +46,19 @@ class InstantMesh(TextTo3D):
         self.zero123plus_pipe = None
         self.instant_mesh_model = None
         self.infer_config = None
+        self.is_flexicubes = False
+
+    def _patch_config(self, config):
+        """
+        Helper to ensure config targets point to the correct classes.
+        Since we added INSTANT_MESH_ROOT to sys.path, 'src' is a top-level module.
+        If the keys in yaml are 'src.models...', they should work directly.
+        But if we need to patch them, we can do it here.
+        
+        The draft suggests patching to 'instantmesh.src.', but since we added the root
+        to sys.path, 'src.' should be sufficient if the code inside uses 'src.'.
+        """
+        return config
 
     def init_model(self):
         if self.txt2img_pipe is None:
@@ -45,11 +71,11 @@ class InstantMesh(TextTo3D):
 
         if self.zero123plus_pipe is None:
             print("Loading Zero123++ model...")
-            # Use the custom pipeline from the folder as requested/implied by the notebook structure
-            # But the notebook uses "sudo-ai/zero123plus-v1.2" with custom_pipeline="zero123plus"
-            # The user said "I have included the custom pipeline of Zero123plus ... in the folder text_to_3d/zero123plus"
-            # So we should point custom_pipeline to that folder.
-            custom_pipeline_path = os.path.join(os.path.dirname(__file__), "instant_mesh", "zero123plus")
+            # We use the pipeline logic from the draft/submodule
+            # The draft uses "instantmesh/zero123plus" as custom_pipeline, 
+            # which likely refers to a local folder or a specific revision.
+            # We'll check if 'InstantMesh/zero123plus' exists.
+            custom_pipeline_path = os.path.join(INSTANT_MESH_ROOT, "zero123plus")
             
             self.zero123plus_pipe = DiffusionPipeline.from_pretrained(
                 "sudo-ai/zero123plus-v1.2", 
@@ -64,14 +90,8 @@ class InstantMesh(TextTo3D):
 
         if self.instant_mesh_model is None:
             print("Loading InstantMesh model...")
-
-            base_path = os.path.dirname(__file__) 
-            instant_mesh_root = os.path.join(base_path, "instant_mesh")
-            if instant_mesh_root not in sys.path:
-                sys.path.append(instant_mesh_root)
             
-            # User confirmed configs/instant-mesh-base.yaml exists in the repo
-            config_path = os.path.join(instant_mesh_root, "configs", "instant-mesh-base.yaml")
+            config_path = os.path.join(INSTANT_MESH_ROOT, "configs", "instant-mesh-base.yaml")
             
             if not os.path.exists(config_path):
                  raise FileNotFoundError(f"Config not found at {config_path}")
@@ -81,14 +101,19 @@ class InstantMesh(TextTo3D):
             self.infer_config = config.infer_config
             
             model_ckpt_path = hf_hub_download(repo_id="TencentARC/InstantMesh", filename="instant_mesh_base.ckpt", repo_type="model")
+            
             self.instant_mesh_model = instantiate_from_config(model_config)
+            
             state_dict = torch.load(model_ckpt_path, map_location='cpu')['state_dict']
             state_dict = {k[14:]: v for k, v in state_dict.items() if k.startswith('lrm_generator.') and 'source_camera' not in k}
             self.instant_mesh_model.load_state_dict(state_dict, strict=True)
             self.instant_mesh_model.to(self.device)
             
             # Init flexicubes
-            self.instant_mesh_model.init_flexicubes_geometry(self.device, fovy=30.0)
+            self.is_flexicubes = os.path.basename(config_path).startswith("instant-mesh")
+            if self.is_flexicubes:
+                self.instant_mesh_model.init_flexicubes_geometry(self.device, fovy=30.0)
+            
             self.instant_mesh_model.eval()
 
     def preprocess(self, input_image, do_remove_background):
@@ -145,8 +170,10 @@ class InstantMesh(TextTo3D):
         mv_images_tensor = torch.from_numpy(mv_images_np).permute(2, 0, 1).contiguous().float()     # (3, 960, 640)
         mv_images_tensor = rearrange(mv_images_tensor, 'c (n h) (m w) -> (n m) c h w', n=3, m=2)    # (6, 3, 320, 320)
         
-        input_cameras = get_zero123plus_input_cameras(batch_size=1, radius=4.0).to(self.device)
         mv_images_tensor = mv_images_tensor.unsqueeze(0).to(self.device)
+        mv_images_tensor = v2.functional.resize(mv_images_tensor, (320, 320), interpolation=3, antialias=True).clamp(0, 1)
+
+        input_cameras = get_zero123plus_input_cameras(batch_size=1, radius=4.0).to(self.device)
         
         os.makedirs(output_dir, exist_ok=True)
         mesh_basename = text.replace(' ', '_')
@@ -178,4 +205,7 @@ class InstantMesh(TextTo3D):
                 results.append(path)
             except Exception as e:
                 print(f"Failed to convert '{text}': {e}")
+                import traceback
+                traceback.print_exc()
         return results
+
