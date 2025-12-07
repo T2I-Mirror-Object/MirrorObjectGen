@@ -38,7 +38,7 @@ class InstantMesh(TextTo3D):
         if self.txt2img_pipe is None:
             print("Loading Stable Diffusion model...")
             self.txt2img_pipe = DiffusionPipeline.from_pretrained(
-                "stabilityai/stable-diffusion-2-1",
+                "stable-diffusion-v1-5/stable-diffusion-v1-5",
                 torch_dtype=torch.float16 if self.device.type == "cuda" else torch.float32
             )
             self.txt2img_pipe.to(self.device)
