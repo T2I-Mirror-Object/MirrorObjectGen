@@ -43,7 +43,10 @@ class RobustViewOptimizer(nn.Module):
         # Targets/Start values
         start_dist = init_params.get("distance", 3.5)
         start_elev = init_params.get("elevation", 20.0)
-        start_azim = init_params.get("azimuth", 0.0)
+        start_azim = init_params.get("azimuth", 15.0)
+        if -10 < start_azim < 10:
+            print(f"Adjusting start azimuth from {start_azim} to 15.0 to avoid blind spot.")
+            start_azim = 15.0
 
         # 1. Define Hard Constraints (Min/Max)
         self.min_dist = 1.0

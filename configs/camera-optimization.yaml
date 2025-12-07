@@ -2,7 +2,7 @@ optimization:
   steps: 100
   learning_rate: 0.05
   image_size: 256
-  faces_per_pixel: 50
+  faces_per_pixel: 15
   blend_params:
     sigma: 1.0e-4
     gamma: 1.0e-4
@@ -10,7 +10,7 @@ optimization:
 initial_parameters:
   distance: 3.5
   elevation: 20.0
-  azimuth: 0.0
+  azimuth: 15.0
 
 loss_weights:
   visibility: 10.0
