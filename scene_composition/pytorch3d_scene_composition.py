@@ -317,6 +317,18 @@ class SceneComposition:
 
         return mirror_frame
 
+    def _create_floor(self, width: float = 20.0, depth: float = 20.0, thickness: float = 0.1) -> Meshes:
+        """Create a large rectangular floor."""
+        floor = self._create_box_mesh(width, thickness, depth)
+        
+        # Place floor just below y=0
+        # The box is centered at (0, 0, 0) with height `thickness`
+        # To have top surface at y=0, we need to move it to y = -thickness/2
+        translation = torch.tensor([0.0, -thickness/2, 0.0], device=self.device)
+        floor = self._apply_translation(floor, translation)
+        
+        return floor
+
     def _calculate_objects_reflection(self, meshes: List[Meshes]) -> List[Meshes]:
         """Create mirror reflections of objects."""
         reflected_meshes = []
@@ -351,6 +363,7 @@ class SceneComposition:
                 - 'objects': List of original object meshes
                 - 'mirror': List containing the mirror frame mesh
                 - 'reflections': List of reflected object meshes
+                - 'floor': List containing the floor mesh
         """
         # Load and process objects
         objects = self._load_objects(object_paths)
@@ -364,11 +377,15 @@ class SceneComposition:
         # Create reflections
         reflections = self._calculate_objects_reflection(objects)
 
+        # Create floor
+        floor = self._create_floor()
+
         # Return scene as structured dictionary
         scene = {
             'objects': objects,
             'mirror': [mirror_frame],
-            'reflections': reflections
+            'reflections': reflections,
+            'floor': [floor]
         }
 
         return scene
