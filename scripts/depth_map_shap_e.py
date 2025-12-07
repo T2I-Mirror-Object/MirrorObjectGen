@@ -4,7 +4,7 @@ from scene_composition.pytorch3d_scene_composition import SceneComposition
 from depth_extraction.pytorch3d_depth_extractor import PyTorch3DDepthExtractor
 import os
 import argparse
-
+from camera_optimization.camera_optimizer import optimize_view
 
 def generate_depth_for_prompt(
     prompt,
@@ -19,9 +19,9 @@ def generate_depth_for_prompt(
     Args:
         prompt: Text description of the scene (e.g., "a teddy bear in front of the mirror")
         output_dir: Base directory for all outputs (default: "results")
-        camera_distance: Distance of camera from origin (default: 5.0)
-        camera_elevation: Camera elevation angle in degrees (default: 25.0)
-        camera_azimuth: Camera azimuth angle in degrees (default: 10.0)
+        camera_distance: Initial guess for distance (default: 5.0)
+        camera_elevation: Initial guess for elevation (default: 25.0)
+        camera_azimuth: Initial guess for azimuth (default: 10.0)
     
     Returns:
         str: Path to the generated depth map image
@@ -69,25 +69,37 @@ def generate_depth_for_prompt(
     print(f"    - {len(scene['mirror'])} mirror frame")
     print(f"    - {len(scene['reflections'])} reflections")
     
+    # Optimize Camera View
+    print("\nOptimizing Camera View...")
+    # You could pass initial guesses if the optimizer supported it, 
+    # but currently it starts from fixed defaults in __init__.
+    # We could modify BestViewOptimizer to accept init params if needed.
+    opt_dist, opt_elev, opt_azim = optimize_view(scene, device="cuda")
+    
+    print(f"  ✓ Optimized View: Dist={opt_dist:.2f}, Elev={opt_elev:.2f}, Azim={opt_azim:.2f}")
+
     # Extract depth map from the composed scene
     print("\nExtracting depth map...")
     extractor = PyTorch3DDepthExtractor(
         image_size=(1024, 1024),
         output_dir=f"{output_dir}/depth",
         device="cuda",
-        camera_distance=camera_distance,
-        camera_elevation=camera_elevation,
-        camera_azimuth=camera_azimuth,
+        # We can pass defaults here, but we will override in the method call
+        camera_distance=opt_dist,
+        camera_elevation=opt_elev,
+        camera_azimuth=opt_azim,
         fov=60.0,
         faces_per_pixel=1,
         normalize=True,
         invert=True
     )
     
+    # Pass the optimized parameters explicitly (redundant if init updated, but safe)
     depth_map = extractor.extract_depth_map(
         scene,
         output_prefix="scene_depth",
-        object_paths=obj_paths
+        object_paths=obj_paths,
+        camera_params=(opt_dist, opt_elev, opt_azim)
     )
     
     print(f"  ✓ Depth map saved to: {depth_map.image_path}")
