@@ -5,6 +5,7 @@ from depth_extraction.pytorch3d_depth_extractor import PyTorch3DDepthExtractor
 import os
 import argparse
 import torch
+from camera_optimization.camera_optimizer import optimize_view
 
 
 def generate_depth_for_prompt(
@@ -60,6 +61,12 @@ def generate_depth_for_prompt(
     print(f"    - {len(scene['objects'])} objects")
     print(f"    - {len(scene['mirror'])} mirror frame")
     print(f"    - {len(scene['reflections'])} reflections")
+
+    # Optimize Camera View
+    print("\nOptimizing Camera View...")
+    opt_dist, opt_elev, opt_azim = optimize_view(scene, device="cuda")
+    
+    print(f"  ✓ Optimized View: Dist={opt_dist:.2f}, Elev={opt_elev:.2f}, Azim={opt_azim:.2f}")
     
     # Extract depth map from the composed scene
     print("\nExtracting depth map...")
@@ -67,9 +74,9 @@ def generate_depth_for_prompt(
         image_size=(1024, 1024),
         output_dir=f"{output_dir}/depth",
         device="cuda" if torch.cuda.is_available() else "cpu",
-        camera_distance=camera_distance,
-        camera_elevation=camera_elevation,
-        camera_azimuth=camera_azimuth,
+        camera_distance=opt_dist,
+        camera_elevation=opt_elev,
+        camera_azimuth=opt_azim,
         fov=60.0,
         faces_per_pixel=1,
         normalize=True,
