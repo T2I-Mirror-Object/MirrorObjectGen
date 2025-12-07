@@ -114,13 +114,28 @@ class InstantMesh(TextTo3D):
         print(f"Generating image for: {text}")
         image = self.txt2img_pipe(text, guidance_scale=self.guidance_scale).images[0]
         
+        # Save Text to Image result
+        debug_dir = os.path.join("results", "instant_mesh_stages")
+        os.makedirs(debug_dir, exist_ok=True)
+        filename_prefix = text.replace(" ", "_")
+        image.save(os.path.join(debug_dir, f"{filename_prefix}_1_text_to_image.png"))
+        
+        
         # 2. Preprocess Image
         print("Preprocessing image...")
         processed_image = self.preprocess(image, do_remove_background=True)
+
+        # Save Preprocessed Image
+        processed_image.save(os.path.join(debug_dir, f"{filename_prefix}_2_preprocessed.png"))
+        
         
         # 3. Generate Multi-View Images
         print("Generating multi-view images...")
         mv_images = self.generate_mvs(processed_image)
+
+        # Save Multi-view Images
+        mv_images.save(os.path.join(debug_dir, f"{filename_prefix}_3_multiview.png"))
+        
         
         # 4. Reconstruct 3D Mesh
         print("Reconstructing 3D mesh...")
