@@ -15,14 +15,14 @@ import rembg
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from text_to_3d.text_to_3d import TextTo3D
-from text_to_3d.instant_mesh_utils.infer_util import remove_background, resize_foreground
-from text_to_3d.instant_mesh_utils.train_util import instantiate_from_config
-from text_to_3d.instant_mesh_utils.camera_util import (
+from text_to_3d.instant_mesh.src.utils.infer_util import remove_background, resize_foreground
+from text_to_3d.instant_mesh.src.utils.train_util import instantiate_from_config
+from text_to_3d.instant_mesh.src.utils.camera_util import (
     FOV_to_intrinsics, 
     get_zero123plus_input_cameras,
     get_circular_camera_poses
 )
-from text_to_3d.instant_mesh_utils.mesh_util import save_obj_with_mtl
+from text_to_3d.instant_mesh.src.utils.mesh_util import save_obj_with_mtl
 
 class InstantMesh(TextTo3D):
     def __init__(self, device: str = "cuda", guidance_scale: float = 7.5):
@@ -49,7 +49,7 @@ class InstantMesh(TextTo3D):
             # But the notebook uses "sudo-ai/zero123plus-v1.2" with custom_pipeline="zero123plus"
             # The user said "I have included the custom pipeline of Zero123plus ... in the folder text_to_3d/zero123plus"
             # So we should point custom_pipeline to that folder.
-            custom_pipeline_path = os.path.join(os.path.dirname(__file__), "zero123plus")
+            custom_pipeline_path = os.path.join(os.path.dirname(__file__), "instant_mesh", "zero123plus")
             
             self.zero123plus_pipe = DiffusionPipeline.from_pretrained(
                 "sudo-ai/zero123plus-v1.2", 
@@ -64,9 +64,14 @@ class InstantMesh(TextTo3D):
 
         if self.instant_mesh_model is None:
             print("Loading InstantMesh model...")
+
+            base_path = os.path.dirname(__file__) 
+            instant_mesh_root = os.path.join(base_path, "instant_mesh")
+            if instant_mesh_root not in sys.path:
+                sys.path.append(instant_mesh_root)
             
             # User confirmed configs/instant-mesh-base.yaml exists in the repo
-            config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "instant-mesh-base.yaml")
+            config_path = os.path.join(instant_mesh_root, "configs", "instant-mesh-base.yaml")
             
             if not os.path.exists(config_path):
                  raise FileNotFoundError(f"Config not found at {config_path}")
