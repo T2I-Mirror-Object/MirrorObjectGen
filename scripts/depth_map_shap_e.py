@@ -71,9 +71,6 @@ def generate_depth_for_prompt(
     
     # Optimize Camera View
     print("\nOptimizing Camera View...")
-    # You could pass initial guesses if the optimizer supported it, 
-    # but currently it starts from fixed defaults in __init__.
-    # We could modify BestViewOptimizer to accept init params if needed.
     opt_dist, opt_elev, opt_azim = optimize_view(scene, device="cuda")
     
     print(f"  ✓ Optimized View: Dist={opt_dist:.2f}, Elev={opt_elev:.2f}, Azim={opt_azim:.2f}")
