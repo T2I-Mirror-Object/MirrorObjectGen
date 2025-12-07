@@ -1,5 +1,5 @@
 from text_parser.text_parser_impl_2 import TextParserImpl2
-from text_to_3d.instant_mesh import InstantMesh
+from text_to_3d.instant_mesh_model import InstantMesh
 from scene_composition.pytorch3d_scene_composition import SceneComposition
 from depth_extraction.pytorch3d_depth_extractor import PyTorch3DDepthExtractor
 import os
