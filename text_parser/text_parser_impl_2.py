@@ -4,19 +4,13 @@ import re
 
 class TextParserImpl2(TextParser):
     def parse(self, text: str) -> List[str]:
-        """
-        Example:
-        "a chair in front of a mirror, both the chair and its perfect mirror reflection are visible"
-        return ["a chair"]
-
-        "a dog, a cat, a chair in front of a mirror, both the objects and their reflections are visible"
-        return ["a dog", "a cat", "a chair"]
-        """
-
         # Remove the trailing clause:
         # "both the X and its/... reflection(s) are visible"
+        
+        # CHANGE: switched .+? to .*? before 'reflections' to allow 
+        # for cases with NO adjectives (e.g., "its reflection")
         text = re.sub(
-            r',\s*both\s+the\s+.+?\s+and\s+(?:its|their)\s+.+?reflections?\s+are\s+visible\s*$', 
+            r',\s*both\s+the\s+.+?\s+and\s+(?:its|their)\s+.*?reflections?\s+are\s+visible\s*$', 
             '', 
             text, 
             flags=re.IGNORECASE
