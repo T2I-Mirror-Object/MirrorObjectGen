@@ -3,11 +3,11 @@ import torch
 import argparse
 from pathlib import Path
 from PIL import Image
-from diffusers import FluxControlPipeline
+from diffusers import FluxControlNetPipeline, FluxControlNetModel
 from diffusers.utils import load_image
 
 # Parse command line arguments
-parser = argparse.ArgumentParser(description='Generate images using FLUX.1-Depth-dev model with depth map conditioning')
+parser = argparse.ArgumentParser(description='Generate images using FLUX.1-dev with ControlNet-Depth')
 parser.add_argument(
     '--prompt',
     type=str,
@@ -15,16 +15,16 @@ parser.add_argument(
     help='Text prompt for image generation'
 )
 parser.add_argument(
-    '--depth-map',
+    '--control-image',
     type=str,
     default="results/depth/scene_depth.png",
-    help='Path to depth map image (default: results/depth/scene_depth.png)'
+    help='Path to control image (depth map) (default: results/depth/scene_depth.png)'
 )
 parser.add_argument(
     '--output',
     type=str,
-    default="results/flux_depth/output.png",
-    help='Output image path (default: results/flux_depth/output.png)'
+    default="results/flux_controlnet/output.png",
+    help='Output image path (default: results/flux_controlnet/output.png)'
 )
 parser.add_argument(
     '--height',
@@ -41,14 +41,20 @@ parser.add_argument(
 parser.add_argument(
     '--num-inference-steps',
     type=int,
-    default=30,
-    help='Number of inference steps (default: 30)'
+    default=24,
+    help='Number of inference steps (default: 24)'
 )
 parser.add_argument(
     '--guidance-scale',
     type=float,
-    default=10.0,
-    help='Guidance scale for generation (default: 10.0)'
+    default=3.5,
+    help='Guidance scale for generation (default: 3.5)'
+)
+parser.add_argument(
+    '--controlnet-conditioning-scale',
+    type=float,
+    default=0.5,
+    help='ControlNet conditioning scale (default: 0.5)'
 )
 parser.add_argument(
     '--seed',
@@ -70,49 +76,52 @@ output_path = Path(args.output)
 output_path.parent.mkdir(parents=True, exist_ok=True)
 
 print("=" * 60)
-print("FLUX.1-Depth-dev Image Generation")
+print("FLUX.1-ControlNet-Depth Image Generation")
 print("=" * 60)
 print(f"\nPrompt: {args.prompt}")
-print(f"Depth map: {args.depth_map}")
+print(f"Control Image: {args.control_image}")
 print(f"Output: {args.output}")
 print(f"Image size: {args.width}x{args.height}")
 print(f"Inference steps: {args.num_inference_steps}")
 print(f"Guidance scale: {args.guidance_scale}")
+print(f"ControlNet Scale: {args.controlnet_conditioning_scale}")
 print(f"Seed: {args.seed}")
 print(f"Device: {args.device}")
 print()
 
 # Load the pipeline
-print("Loading FLUX.1-Depth-dev model...")
-print("(This may take a while on first run as the model is downloaded)")
+print("Loading FLUX.1 ControlNet models...")
+print("(This may take a while on first run as the models are downloaded)")
 
 try:
-    pipe = FluxControlPipeline.from_pretrained(
-        "black-forest-labs/FLUX.1-Depth-dev",
+    controlnet = FluxControlNetModel.from_pretrained(
+        "Shakker-Labs/FLUX.1-dev-ControlNet-Depth",
+        torch_dtype=torch.bfloat16
+    )
+    
+    pipe = FluxControlNetPipeline.from_pretrained(
+        "black-forest-labs/FLUX.1-dev",
+        controlnet=controlnet,
         torch_dtype=torch.bfloat16
     ).to(args.device)
-    print("✓ Model loaded successfully")
+    
+    print("✓ Models loaded successfully")
 except Exception as e:
-    print(f"✗ Error loading model: {e}")
+    print(f"✗ Error loading models: {e}")
     print("\nNote: You may need to accept the model license at:")
-    print("https://huggingface.co/black-forest-labs/FLUX.1-Depth-dev")
+    print("https://huggingface.co/black-forest-labs/FLUX.1-dev")
     print("and login with: huggingface-cli login")
     exit(1)
 
-# Load depth map
-print(f"\nLoading depth map from: {args.depth_map}")
+# Load control image
+print(f"\nLoading control image from: {args.control_image}")
 try:
-    # Load the depth map image
-    depth_image = Image.open(args.depth_map)
+    # load_image handles both local paths and URLs
+    control_image = load_image(args.control_image)
     
-    # Convert grayscale depth map to RGB if needed
-    # FLUX.1-Depth-dev expects RGB depth maps
-    if depth_image.mode != 'RGB':
-        depth_image = depth_image.convert('RGB')
-    
-    print(f"✓ Depth map loaded: {depth_image.size} ({depth_image.mode})")
+    print(f"✓ Control image loaded: {control_image.size}")
 except Exception as e:
-    print(f"✗ Error loading depth map: {e}")
+    print(f"✗ Error loading control image: {e}")
     exit(1)
 
 # Generate image
@@ -122,9 +131,10 @@ print(f"This may take a few minutes depending on your hardware...")
 try:
     image = pipe(
         prompt=args.prompt,
-        control_image=depth_image,
-        height=args.height,
+        control_image=control_image,
+        controlnet_conditioning_scale=args.controlnet_conditioning_scale,
         width=args.width,
+        height=args.height,
         num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
         generator=torch.Generator(device=args.device).manual_seed(args.seed),

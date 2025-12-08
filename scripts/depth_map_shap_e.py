@@ -94,7 +94,7 @@ def generate_depth_for_prompt(
     # Pass the optimized parameters explicitly (redundant if init updated, but safe)
     depth_map = extractor.extract_depth_map(
         scene,
-        output_prefix="scene_depth",
+        output_prefix="scene_depth_shap_e",
         object_paths=obj_paths,
         camera_params=(opt_dist, opt_elev, opt_azim)
     )
