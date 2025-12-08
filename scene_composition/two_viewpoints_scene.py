@@ -48,11 +48,11 @@ class TwoViewpointsScene(SceneComposition):
         # Get vertices
         verts = mesh.verts_packed().clone()
         
-        # Flip Z relative to center: z_new = center_z - (z_old - center_z) = 2*center_z - z_old
-        verts[:, 2] = 2 * center_z - verts[:, 2]
+        reflection_matrix = torch.diag(torch.tensor([-1, 1, 1], dtype=torch.float32, device=self.device))
+        reflected_verts = torch.matmul(verts, reflection_matrix.t())
         
         # Helper to reconstruct mesh
-        new_mesh = Meshes(verts=[verts], faces=mesh.faces_list())
+        new_mesh = Meshes(verts=[reflected_verts], faces=mesh.faces_list())
         
         return new_mesh
 

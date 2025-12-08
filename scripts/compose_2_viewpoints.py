@@ -98,7 +98,7 @@ def run_two_viewpoints_pipeline(
     # User specified: "just object and floor" (no mirror, no reflections)
     scene_view2 = {
         'objects': flipped_objects,
-        'mirror': scene['mirror'], # No mirror frame
+        'mirror': [], # No mirror frame
         'reflections': [], # No reflections
         'floor': scene['floor']
     }
