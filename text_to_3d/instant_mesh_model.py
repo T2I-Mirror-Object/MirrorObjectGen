@@ -3,7 +3,7 @@ import numpy as np
 import os
 import sys
 from PIL import Image
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from diffusers import DiffusionPipeline, EulerAncestralDiscreteScheduler
 from huggingface_hub import hf_hub_download
 from omegaconf import OmegaConf
@@ -38,43 +38,18 @@ except ImportError as e:
     raise e
 
 class InstantMesh(TextTo3D):
-    def __init__(self, device: str = "cuda", guidance_scale: float = 7.5):
+    def __init__(self, device: str = "cuda"):
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-        self.guidance_scale = guidance_scale
         
-        self.txt2img_pipe = None
         self.zero123plus_pipe = None
         self.instant_mesh_model = None
         self.infer_config = None
         self.is_flexicubes = False
 
-    def _patch_config(self, config):
-        """
-        Helper to ensure config targets point to the correct classes.
-        Since we added INSTANT_MESH_ROOT to sys.path, 'src' is a top-level module.
-        If the keys in yaml are 'src.models...', they should work directly.
-        But if we need to patch them, we can do it here.
-        
-        The draft suggests patching to 'instantmesh.src.', but since we added the root
-        to sys.path, 'src.' should be sufficient if the code inside uses 'src.'.
-        """
-        return config
-
     def init_model(self):
-        if self.txt2img_pipe is None:
-            print("Loading Stable Diffusion model...")
-            self.txt2img_pipe = DiffusionPipeline.from_pretrained(
-                "stable-diffusion-v1-5/stable-diffusion-v1-5",
-                torch_dtype=torch.float16 if self.device.type == "cuda" else torch.float32
-            )
-            self.txt2img_pipe.to(self.device)
-
         if self.zero123plus_pipe is None:
             print("Loading Zero123++ model...")
             # We use the pipeline logic from the draft/submodule
-            # The draft uses "instantmesh/zero123plus" as custom_pipeline, 
-            # which likely refers to a local folder or a specific revision.
-            # We'll check if 'InstantMesh/zero123plus' exists.
             custom_pipeline_path = os.path.join(INSTANT_MESH_ROOT, "zero123plus")
             
             self.zero123plus_pipe = DiffusionPipeline.from_pretrained(
@@ -132,37 +107,44 @@ class InstantMesh(TextTo3D):
         ).images[0]
         return z123_image
 
-    def convert_text_to_3d(self, text: str, output_dir: str) -> str:
+    def convert_image_to_3d(self, image: Union[Image.Image, str], output_dir: str, name_prefix: str = "output") -> str:
+        """
+        Convert an image to a 3D mesh.
+        
+        Args:
+            image: PIL Image or path to image file.
+            output_dir: Directory to save results.
+            name_prefix: Prefix for output filenames.
+            
+        Returns:
+            Path to the generated .obj file.
+        """
         self.init_model()
         
-        # 1. Text to Image
-        print(f"Generating image for: {text}")
-        image = self.txt2img_pipe(text, guidance_scale=self.guidance_scale).images[0]
-        
-        # Save Text to Image result
+        if isinstance(image, str):
+            image = Image.open(image)
+            
+        # Debug directory
         debug_dir = os.path.join("results", "instant_mesh_stages")
         os.makedirs(debug_dir, exist_ok=True)
-        filename_prefix = text.replace(" ", "_")
-        image.save(os.path.join(debug_dir, f"{filename_prefix}_1_text_to_image.png"))
         
-        
-        # 2. Preprocess Image
+        # 1. Preprocess Image
         print("Preprocessing image...")
         processed_image = self.preprocess(image, do_remove_background=True)
 
         # Save Preprocessed Image
-        processed_image.save(os.path.join(debug_dir, f"{filename_prefix}_2_preprocessed.png"))
+        processed_image.save(os.path.join(debug_dir, f"{name_prefix}_2_preprocessed.png"))
         
         
-        # 3. Generate Multi-View Images
+        # 2. Generate Multi-View Images
         print("Generating multi-view images...")
         mv_images = self.generate_mvs(processed_image)
 
         # Save Multi-view Images
-        mv_images.save(os.path.join(debug_dir, f"{filename_prefix}_3_multiview.png"))
+        mv_images.save(os.path.join(debug_dir, f"{name_prefix}_3_multiview.png"))
         
         
-        # 4. Reconstruct 3D Mesh
+        # 3. Reconstruct 3D Mesh
         print("Reconstructing 3D mesh...")
         
         # Prepare input for InstantMesh
@@ -176,8 +158,7 @@ class InstantMesh(TextTo3D):
         input_cameras = get_zero123plus_input_cameras(batch_size=1, radius=4.0).to(self.device)
         
         os.makedirs(output_dir, exist_ok=True)
-        mesh_basename = text.replace(' ', '_')
-        mesh_fpath = os.path.join(output_dir, f"{mesh_basename}.obj")
+        mesh_fpath = os.path.join(output_dir, f"{name_prefix}.obj")
         
         with torch.no_grad():
             planes = self.instant_mesh_model.forward_planes(mv_images_tensor, input_cameras)
@@ -197,15 +178,10 @@ class InstantMesh(TextTo3D):
         print(f"Mesh saved to {mesh_fpath}")
         return mesh_fpath
 
+    def convert_text_to_3d(self, text: str, output_dir: str) -> str:
+        raise NotImplementedError("This method is deprecated. Use convert_image_to_3d instead.")
+
     def convert_multiple_texts_to_3d(self, texts: List[str], output_dir: str) -> List[str]:
-        results = []
-        for text in texts:
-            try:
-                path = self.convert_text_to_3d(text, output_dir)
-                results.append(path)
-            except Exception as e:
-                print(f"Failed to convert '{text}': {e}")
-                import traceback
-                traceback.print_exc()
-        return results
+         raise NotImplementedError("This method is deprecated. Use convert_image_to_3d iteratively.")
+
 

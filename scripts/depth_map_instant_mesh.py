@@ -1,5 +1,6 @@
 from text_parser.text_parser_impl_2 import TextParserImpl2
 from text_to_3d.instant_mesh_model import InstantMesh
+from text_to_image.stable_diffusion import StableDiffusionGenerator
 from scene_composition.pytorch3d_scene_composition import SceneComposition
 from depth_extraction.pytorch3d_depth_extractor import PyTorch3DDepthExtractor
 import os
@@ -16,7 +17,7 @@ def generate_depth_for_prompt(
     camera_azimuth=10.0
 ):
     """
-    Generate a depth map for a given text prompt using InstantMesh.
+    Generate a depth map for a given text prompt using separate Text-to-Image and InstantMesh models.
     """
     # Create output directories
     os.makedirs(output_dir, exist_ok=True)
@@ -28,15 +29,35 @@ def generate_depth_for_prompt(
     text_parser = TextParserImpl2()
     obj_name_list = text_parser.parse(prompt)
     
-    # Generate 3D objects from text using InstantMesh
-    # InstantMesh produces .obj files, so we can use standard SceneComposition
-    instant_mesh = InstantMesh(device="cuda" if torch.cuda.is_available() else "cpu")
-    obj_paths = instant_mesh.convert_multiple_texts_to_3d(
-        texts=obj_name_list,
-        output_dir=f"{output_dir}/instant_mesh"
-    )
+    # Initialize Models
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    print("Objects are created successfully by InstantMesh")
+    print("\nInitializing Stable Diffusion...")
+    sd_generator = StableDiffusionGenerator(device=device)
+    
+    print("\nInitializing InstantMesh...")
+    instant_mesh = InstantMesh(device=device)
+    
+    # Generate 3D objects
+    obj_paths = []
+    
+    for i, obj_text in enumerate(obj_name_list):
+        print(f"\n[{i+1}/{len(obj_name_list)}] Processing object: '{obj_text}'")
+        
+        # 1. Text to Image
+        img_filename = obj_text.replace(" ", "_")
+        img_path = os.path.join(output_dir, "instant_mesh", "images", f"{img_filename}.png")
+        image = sd_generator.generate(obj_text, output_path=img_path)
+        
+        # 2. Image to 3D
+        mesh_path = instant_mesh.convert_image_to_3d(
+            image=image,
+            output_dir=os.path.join(output_dir, "instant_mesh"),
+            name_prefix=img_filename
+        )
+        obj_paths.append(mesh_path)
+    
+    print("\nObjects creation completed.")
     
     print("=" * 60)
     print("PyTorch3D Scene Composition & Depth Extraction")
@@ -52,7 +73,7 @@ def generate_depth_for_prompt(
         mirror_gap_side=2.0,
         mirror_gap_top=2.0,
         mirror_gap_ahead=3.0,
-        device="cuda" if torch.cuda.is_available() else "cpu"
+        device=device
     )
     
     scene = scene_compositor.compose_scene(obj_paths)
@@ -73,7 +94,7 @@ def generate_depth_for_prompt(
     extractor = PyTorch3DDepthExtractor(
         image_size=(1024, 1024),
         output_dir=f"{output_dir}/depth",
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device=device,
         camera_distance=opt_dist,
         camera_elevation=opt_elev,
         camera_azimuth=opt_azim,
