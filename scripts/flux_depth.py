@@ -6,9 +6,6 @@ from PIL import Image
 from diffusers import FluxControlPipeline
 from diffusers.utils import load_image
 
-## Set HuggingFace cache directory
-# os.environ["HF_HOME"] = "../../hf_cache"
-
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Generate images using FLUX.1-Depth-dev model with depth map conditioning')
 parser.add_argument(
