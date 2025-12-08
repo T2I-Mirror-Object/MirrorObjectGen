@@ -112,12 +112,12 @@ def point_cloud_to_mesh(pcd, output_mesh_path="reconstructed_mesh.obj"):
     
     return mesh
 
-# --- USAGE ---
-# 1. Generate Cloud
-pcd = image_to_point_cloud("my_chair_image.jpg")
+if __name__ == "__main__":
+    # 1. Generate Cloud
+    pcd = image_to_point_cloud("my_chair_image.jpg")
 
-# 2. Convert to Mesh
-mesh = point_cloud_to_mesh(pcd)
+    # 2. Convert to Mesh
+    mesh = point_cloud_to_mesh(pcd)
 
-# 3. (Optional) Visualize
-o3d.visualization.draw_geometries([mesh])
+    # 3. (Optional) Visualize
+    o3d.visualization.draw_geometries([mesh])
