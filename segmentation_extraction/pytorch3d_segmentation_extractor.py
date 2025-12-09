@@ -426,3 +426,51 @@ class PyTorch3DSegmentationExtractor(SegmentationExtractor):
         condition_map.json_path = str(json_path)
 
         return condition_map
+
+    def extract_mirror_mask(self, scene: Dict[str, List[Meshes]], output_filename: str = "mirror_mask.png") -> str:
+        """
+        Extract the binary mask of the mirror plane bounded by the mirror frame.
+        
+        Args:
+            scene: Dictionary with key 'mirror_surface' containing the mirror plane mesh.
+            output_filename: Filename for the saved mask.
+            
+        Returns:
+            Path to the saved mask image.
+        """
+        # Create output directory
+        mask_output_dir = self.output_dir.parent / "mirror_mask"
+        mask_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get mirror surface mesh
+        mirror_surface = scene.get('mirror_surface', [])
+        if not mirror_surface:
+            print("Warning: No mirror_surface found in scene.")
+            return None
+            
+        # Create camera
+        camera = self._create_camera()
+        
+        # Create renderer (use 0 for background, 1 for mirror)
+        # We can use InstanceIDRenderer with a single mesh and ID=1
+        renderer = InstanceIDRenderer(
+            cameras=camera,
+            image_size=self.image_size,
+            faces_per_pixel=self.faces_per_pixel,
+            bin_size=0,
+            cull_backfaces=False
+        ).to(self.device)
+        
+        # Render
+        # mesh_to_id=[1] means the first (and only) mesh gets ID 1.
+        ids = renderer(mirror_surface, mesh_to_id=[1])
+        inst_id_img = ids[0] # (H, W)
+        
+        # Create binary mask (0 or 255)
+        mask = (inst_id_img == 1).detach().cpu().numpy().astype(np.uint8) * 255
+        
+        # Save
+        output_path = mask_output_dir / output_filename
+        Image.fromarray(mask, mode="L").save(output_path)
+        
+        return str(output_path)

@@ -304,18 +304,47 @@ class SceneComposition:
 
         return frame
 
-    def _create_mirror_frame(self, meshes: List[Meshes]) -> Meshes:
-        """Create mirror frame sized to fit all objects."""
+    def _create_mirror_frame(self, meshes: List[Meshes]) -> Tuple[Meshes, Meshes]:
+        """Create mirror frame sized to fit all objects. Returns (frame, mirror_surface)."""
         total_width = self._total_objects_width(meshes) + self.mirror_gap_side * 2
         total_height = self._max_objects_height(meshes) + self.mirror_gap_top
 
         mirror_frame = self._make_mirror_frame(total_width, total_height, self.mirror_thickness)
+        
+        # Create mirror surface (inner plane)
+        inner_width = total_width - 2 * self.mirror_thickness
+        inner_height = total_height - 2 * self.mirror_thickness
+        # Make it slightly thinner than frame so it sits inside, or same depth if you prefer.
+        # Typically a plane is thin. Let's make it a thin box or valid mesh.
+        # We'll use a thin box for consistency with PyTorch3D meshes
+        mirror_surface = self._create_box_mesh(inner_width, inner_height, 0.01)
+        
+        # Position mirror surface together with frame
+        surface_translation_y = (total_height/2 - self.mirror_thickness) - (inner_height/2) 
+        # Actually simplest is: center of frame is at y_frame_center. 
+        # The _make_mirror_frame puts frame on XZ plane? Wait, let's check _make_mirror_frame.
+        
+        # _make_mirror_frame puts frame on XZ plane via _put_single_object_on_plane_xz.
+        # This shifts min_y to 0.
+        # The frame is centered at X=0.
+        
+        # Let's align the mirror surface.
+        # Frame bounds:
+        frame_bounds = self._get_mesh_bounds(mirror_frame)
+        frame_min_y = frame_bounds[0, 1]
+        frame_max_y = frame_bounds[1, 1]
+        frame_center_y = (frame_min_y + frame_max_y) / 2
+        
+        # Place surface at that center Y
+        # mirror_surface created at origin (y=0). Shift to frame_center_y.
+        mirror_surface = self._apply_translation(mirror_surface, torch.tensor([0, frame_center_y, 0], device=self.device))
 
-        # Move mirror behind objects
+        # Move both behind objects
         translation = torch.tensor([0, 0, -self.mirror_gap_ahead], dtype=torch.float32, device=self.device)
         mirror_frame = self._apply_translation(mirror_frame, translation)
+        mirror_surface = self._apply_translation(mirror_surface, translation)
 
-        return mirror_frame
+        return mirror_frame, mirror_surface
 
     def _create_floor(self, width: float = 20.0, depth: float = 20.0, thickness: float = 0.1) -> Meshes:
         """Create a large rectangular floor."""
@@ -371,8 +400,8 @@ class SceneComposition:
         objects = self._add_random_rotation(objects)
         objects = self._put_objects_next_to_each_other(objects)
 
-        # Create mirror frame
-        mirror_frame = self._create_mirror_frame(objects)
+        # Create mirror frame and surface
+        mirror_frame, mirror_surface = self._create_mirror_frame(objects)
 
         # Create reflections
         reflections = self._calculate_objects_reflection(objects)
@@ -384,6 +413,7 @@ class SceneComposition:
         scene = {
             'objects': objects,
             'mirror': [mirror_frame],
+            'mirror_surface': [mirror_surface],
             'reflections': reflections,
             'floor': [floor]
         }
