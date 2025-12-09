@@ -3,12 +3,25 @@ import numpy as np
 from PIL import Image
 from pathlib import Path
 
-def extract_data_from_hdf5(hdf5_path: str, output_path: str):
+def extract_data_from_hdf5(hdf5_path: str):
     """returns the data present in the hdf5_path file"""
 
     hdf5_data = h5py.File(hdf5_path, "r")
 
-    colors = np.array(hdf5_data["colors"], dtype=np.uint8),
+    data = {
+        "image": np.array(hdf5_data["colors"], dtype=np.uint8),
+        "mirror_mask": (np.array(hdf5_data["category_id_segmaps"], dtype=np.uint8) == 1).astype(np.uint8) * 255, # mask containing the mirror region
+        "object_mask": (np.array(hdf5_data["category_id_segmaps"], dtype=np.uint8) == 2).astype(np.uint8) * 255, # mask depicting the object
+    }
+
+    return data
+
+def extract_image_from_hdf5(hdf5_path: str, output_path: str):
+    """extract the image from the hdf5_path file"""
+
+    hdf5_data = h5py.File(hdf5_path, "r")
+
+    colors = np.array(hdf5_data["colors"], dtype=np.uint8)
 
     img = Image.fromarray(colors[0])
     img.save(output_path)

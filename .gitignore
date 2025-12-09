@@ -5,6 +5,8 @@ Seg2Any/ckpt
 Seg2Any/data
 Seg2Any/result
 
+SynMirror/
+
 *.log
 *.pkl
 # Byte-compiled / optimized / DLL files
