@@ -1,6 +1,3 @@
 [submodule "InstantMesh"]
 	path = InstantMesh
 	url = git@github.com:duyphuc0701/InstantMesh.git
-[submodule "Depth-Anything-3"]
-	path = Depth-Anything-3
-	url = git@github.com:duyphuc0701/Depth-Anything-3.git
