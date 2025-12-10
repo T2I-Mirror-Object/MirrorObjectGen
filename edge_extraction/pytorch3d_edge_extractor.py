@@ -9,21 +9,18 @@ from pytorch3d.renderer import (
     look_at_view_transform,
     FoVPerspectiveCameras,
     RasterizationSettings, 
-    MeshRenderer, 
-    MeshRasterizer, 
-    HardPhongShader,
-    PointLights,
-    Materials,
-    TexturesVertex
+    MeshRasterizer, # We only need the rasterizer, not the full renderer
+    PointLights
 )
 from pytorch3d.structures import Meshes, join_meshes_as_scene
+from pytorch3d.ops import interpolate_face_attributes # Crucial for normal map
 
 from edge_extraction.edge_extractor import EdgeExtractor, EdgeMap
 
-
-class PyTorch3DEdgeExtractor(EdgeExtractor):
+class PyTorch3DGeometricEdgeExtractor(EdgeExtractor):
     """
-    Extract edge maps from PyTorch3D scenes using Canny edge detection on rendered RGB images.
+    Extracts high-quality edge maps using 3D Geometry (Depth + Normals) 
+    instead of RGB processing.
     """
 
     def __init__(
@@ -35,25 +32,7 @@ class PyTorch3DEdgeExtractor(EdgeExtractor):
         camera_elevation: float = 0.0,
         camera_azimuth: float = 0.0,
         fov: float = 60.0,
-        faces_per_pixel: int = 1,
-        canny_low_threshold: int = 100,
-        canny_high_threshold: int = 200,
-        light_location: Tuple[float, float, float] = (0.0, 5.0, 5.0)
     ):
-        """
-        Args:
-            image_size: Output image size (H, W)
-            output_dir: Directory to save edge maps
-            device: Device for PyTorch ('cpu' or 'cuda')
-            camera_distance: Distance of camera from origin
-            camera_elevation: Camera elevation angle in degrees
-            camera_azimuth: Camera azimuth angle in degrees
-            fov: Field of view in degrees
-            faces_per_pixel: Number of faces per pixel for rasterization
-            canny_low_threshold: Lower threshold for Canny edge detection
-            canny_high_threshold: Upper threshold for Canny edge detection
-            light_location: Location of the point light source
-        """
         self.image_size = image_size
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -62,156 +41,130 @@ class PyTorch3DEdgeExtractor(EdgeExtractor):
         self.camera_elevation = camera_elevation
         self.camera_azimuth = camera_azimuth
         self.fov = fov
-        self.faces_per_pixel = faces_per_pixel
-        self.canny_low_threshold = canny_low_threshold
-        self.canny_high_threshold = canny_high_threshold
-        self.light_location = light_location
 
     def _create_camera(self) -> FoVPerspectiveCameras:
-        """Create a camera with specified parameters."""
         R, T = look_at_view_transform(
             dist=self.camera_distance,
             elev=self.camera_elevation,
             azim=self.camera_azimuth,
         )
-
-        camera = FoVPerspectiveCameras(
-            device=self.device,
-            R=R,
-            T=T,
-            fov=self.fov
-        )
-
-        return camera
+        return FoVPerspectiveCameras(device=self.device, R=R, T=T, fov=self.fov)
 
     def extract_edge_map(
         self,
         scene: Dict[str, List[Meshes]],
         output_prefix: str = "edge",
-        object_paths: Optional[List[str]] = None,
         camera_params: Optional[Tuple[float, float, float]] = None,
         cameras: Optional[FoVPerspectiveCameras] = None
     ) -> EdgeMap:
-        """
-        Extract edge map from a scene.
-
-        Args:
-            scene: Dictionary with keys 'objects', 'mirror', 'reflections',
-                   each containing a list of Meshes
-            output_prefix: Prefix for output files
-            object_paths: Optional list of file paths (not used essentially)
-            camera_params: Optional tuple of (distance, elevation, azimuth) to override defaults
-            cameras: Optional pre-configured CamerasBase object to use directly
-
-        Returns:
-            EdgeMap with path to edge image
-        """
-        # Create camera
+        
+        # 1. Setup Camera
         if cameras is not None:
-             camera = cameras
+            camera = cameras
         elif camera_params is not None:
             dist, elev, azim = camera_params
             R, T = look_at_view_transform(dist, elev, azim)
-            camera = FoVPerspectiveCameras(
-                device=self.device, 
-                R=R, 
-                T=T, 
-                fov=self.fov
-            )
+            camera = FoVPerspectiveCameras(device=self.device, R=R, T=T, fov=self.fov)
         else:
             camera = self._create_camera()
 
-        # Create renderer
-        raster_settings = RasterizationSettings(
-            image_size=self.image_size,
-            blur_radius=0.0,
-            faces_per_pixel=self.faces_per_pixel,
-        )
-
-        lights = PointLights(device=self.device, location=[self.light_location])
-
-        renderer = MeshRenderer(
-            rasterizer=MeshRasterizer(
-                cameras=camera,
-                raster_settings=raster_settings
-            ),
-            shader=HardPhongShader(
-                device=self.device,
-                cameras=camera,
-                lights=lights
-            )
-        )
-
-        # Prepare meshes - combine all scene elements
+        # 2. Combine Meshes
         all_meshes = []
-        
-        # Add objects
-        for mesh in scene.get('objects', []):
-            all_meshes.append(mesh)
-        
-        # Add mirror
-        for mesh in scene.get('mirror', []):
-            all_meshes.append(mesh)
-        
-        # Add reflections
-        for mesh in scene.get('reflections', []):
-            all_meshes.append(mesh)
-
-        # Add floor - Optional: Floor often creates a horizon line which might be unwanted for object edges.
-        # But if it's part of the scene, maybe we should keep it?
-        # In depth map, floor is included. In segmentation, it seems not explicitly handled in the loop I saw?
-        # Wait, depth_map_shap_e.py includes floor if present.
-        for mesh in scene.get('floor', []):
-            all_meshes.append(mesh)
-
+        for key in ['objects', 'mirror', 'reflections', 'floor']:
+            all_meshes.extend(scene.get(key, []))
+            
         if not all_meshes:
             raise ValueError("Scene contains no meshes")
         
         combined_mesh = join_meshes_as_scene(all_meshes)
         
-        # HardPhongShader requires textures. If none exist, create a default white texture.
-        if combined_mesh.textures is None:
-            # Create a white color (1.0, 1.0, 1.0) for every vertex
-            verts_rgb = torch.ones_like(combined_mesh.verts_packed())
-            verts_rgb = verts_rgb.unsqueeze(0)
-            combined_mesh.textures = TexturesVertex(verts_features=verts_rgb)
+        # 3. Rasterize to get Fragments
+        # We don't need lights or materials, just geometry.
+        raster_settings = RasterizationSettings(
+            image_size=self.image_size,
+            blur_radius=0.0,
+            faces_per_pixel=1, 
+        )
         
-        # Render RGB image
-        images = renderer(combined_mesh) # (N, H, W, 4)
+        rasterizer = MeshRasterizer(
+            cameras=camera, 
+            raster_settings=raster_settings
+        )
         
-        # Take first image and connect to CPU
-        image_rgb = images[0, ..., :3].detach().cpu().numpy() # (H, W, 3)
-        image_rgb = (image_rgb * 255).astype(np.uint8)
+        fragments = rasterizer(combined_mesh)
         
-        # The background is usually black (0) in renderer output if no background color specified
-        # But let's check. Default shader might set background. 
-        # Actually MeshRenderer returns what shader returns. HardPhongShader blends with background?
-        # Usually it returns RGBA. Alpha is 0 for background.
+        # 4. Extract Depth Map (for silhouettes)
+        # zbuf shape: (N, H, W, K) -> take K=0
+        depth_map = fragments.zbuf[..., 0].squeeze().cpu().numpy()
         
-        # Let's use the alpha channel to ensure background is black if needed, 
-        # but Canny works on intensity.
-        # If alpha is present, we can composite against black.
-        image_rgba = images[0].detach().cpu().numpy()
-        alpha = image_rgba[..., 3:]
-        image_rgb = image_rgba[..., :3] * alpha # premultiply alpha to ensure background is black
-        image_rgb = (image_rgb * 255).astype(np.uint8)
+        # Mask out background (where pix_to_face is -1)
+        pix_to_face = fragments.pix_to_face[..., 0].squeeze().cpu().numpy()
+        background_mask = pix_to_face == -1
+        
+        # Normalize depth for edge detection (min-max normalization)
+        depth_valid = depth_map[~background_mask]
+        if depth_valid.size > 0:
+            d_min, d_max = depth_valid.min(), depth_valid.max()
+            if d_max > d_min:
+                depth_norm = (depth_map - d_min) / (d_max - d_min)
+                depth_norm = np.clip(depth_norm, 0, 1)
+            else:
+                depth_norm = np.zeros_like(depth_map)
+        else:
+            depth_norm = np.zeros_like(depth_map)
+            
+        depth_image = (depth_norm * 255).astype(np.uint8)
+        depth_image[background_mask] = 0 # Set background to black
 
-        # Convert to Grayscale for Canny? Canny handles it, but typically expects grayscale.
-        # But Canny on RGB also works (applied per channel? No, usually luminance).
-        # We can pass RGB to cv2.Canny? No, cv2.Canny takes a single channel image.
-        # So we convert to grayscale.
+        # 5. Extract Normal Map (for internal creases)
+        # Calculate vertex normals if not present
+        if combined_mesh.verts_normals_list() is None or len(combined_mesh.verts_normals_list()) == 0:
+             # This computes normals for the whole batch
+             _ = combined_mesh.verts_normals_packed() 
+
+        # Get normals per face vertex
+        verts_normals = combined_mesh.verts_normals_packed() # (V, 3)
+        faces = combined_mesh.faces_packed() # (F, 3)
+        faces_normals = verts_normals[faces] # (F, 3, 3)
         
-        image_gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+        # Interpolate normals to pixels
+        # fragments.bary_coords: (N, H, W, K, 3)
+        # fragments.pix_to_face: (N, H, W, K)
+        pixel_normals = interpolate_face_attributes(
+            fragments.pix_to_face, 
+            fragments.bary_coords, 
+            faces_normals
+        ) 
+        # pixel_normals: (N, H, W, K, 3) -> (H, W, 3)
+        normal_map = pixel_normals[0, ..., 0, :].squeeze().cpu().numpy()
         
-        # Apply Canny
-        edges = cv2.Canny(image_gray, self.canny_low_threshold, self.canny_high_threshold)
-        # edges is (H, W) with 0 and 255
+        # Map normals [-1, 1] to [0, 255] for image processing
+        normal_image = ((normal_map + 1) * 127.5).astype(np.uint8)
+        normal_image[background_mask] = 0
+
+        # 6. Compute Edges "Directly"
+        # We find discontinuities in Depth (Silhouettes) and Normals (Creases)
         
-        # Save edge image
+        # Canny on Depth: Finds occlusion boundaries
+        # Low thresholds because depth is clean
+        edge_depth = cv2.Canny(depth_image, 50, 150) 
+        
+        # Canny on Normals: Finds surface changes
+        # Normals are RGB-like, Canny works on intensity, so we process it as color or individual channels
+        # A simple way is to take the max gradient across dimensions or run Canny on the visual representation
+        edge_normal = cv2.Canny(normal_image, 100, 200)
+
+        # Combine edges
+        # You can use bitwise OR
+        final_edges = cv2.bitwise_or(edge_depth, edge_normal)
+        
+        # Ensure lines are white, background black
+        # (Canny already produces this: 255 for edge, 0 for background)
+
+        # 7. Save
         image_path = self.output_dir / f"{output_prefix}.png"
-        Image.fromarray(edges, mode="L").save(image_path)
+        Image.fromarray(final_edges, mode="L").save(image_path)
         
-        # Create and return EdgeMap
         edge_map = EdgeMap()
         edge_map.image_path = str(image_path)
         
