@@ -1,7 +1,7 @@
 from text_parser.text_parser_impl_2 import TextParserImpl2
 from text_to_3d.shap_e import ShapE
 from scene_composition.pytorch3d_scene_composition import SceneComposition
-from edge_extraction.pytorch3d_edge_extractor import PyTorch3DEdgeExtractor
+from edge_extraction.pytorch3d_edge_extractor import PyTorch3DGeometricEdgeExtractor
 import os
 import argparse
 from camera.camera_optimizer import optimize_view
@@ -71,7 +71,7 @@ def generate_edge_for_prompt(
 
     # Extract edge map from the composed scene
     print("\nExtracting edge map...")
-    extractor = PyTorch3DEdgeExtractor(
+    extractor = PyTorch3DGeometricEdgeExtractor(
         image_size=(1024, 1024),
         output_dir=f"{output_dir}/edge",
         device="cuda",
@@ -79,9 +79,6 @@ def generate_edge_for_prompt(
         camera_elevation=camera_elevation,
         camera_azimuth=camera_azimuth,
         fov=60.0,
-        faces_per_pixel=1,
-        canny_low_threshold=100,
-        canny_high_threshold=200
     )
     
     edge_map = extractor.extract_edge_map(
