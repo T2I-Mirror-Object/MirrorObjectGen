@@ -84,7 +84,6 @@ def generate_edge_for_prompt(
     edge_map = extractor.extract_edge_map(
         scene,
         output_prefix="scene_edge_shap_e",
-        object_paths=obj_paths,
         camera_params=(camera_distance, camera_elevation, camera_azimuth)
     )
     
