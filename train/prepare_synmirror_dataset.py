@@ -27,8 +27,6 @@ def _to_numpy_mask(m):
     if m.dtype == bool:
         m = m.astype(np.uint8) * 255
     elif m.dtype != np.uint8:
-        # If it's not uint8, assume it's some other numeric type (e.g. float 0-1 or similar)
-        # For masks, we typically want 0 or 255.
         m = (m >= 0.5).astype(np.uint8) * 255
     return m
 
@@ -40,16 +38,35 @@ def _save_image(img_array, path, mode=None):
         img = Image.fromarray(img_array)
     img.save(path)
 
+def get_csv_key_from_path(hdf5_path):
+    """
+    Robustly extracts the relative path starting from 'abo_v3' for CSV lookup.
+    Example: .../SynMirror/abo_v3/0/Item/0.hdf5 -> abo_v3/0/Item/0.hdf5
+    """
+    parts = list(hdf5_path.parts)
+    try:
+        # Find where 'abo_v3' starts in the path
+        start_index = parts.index("abo_v3")
+        # Join everything from abo_v3 onwards
+        rel_path = "/".join(parts[start_index:])
+        return rel_path
+    except ValueError:
+        # Fallback if folder structure is unexpected
+        return str(hdf5_path)
+
 def main():
     parser = argparse.ArgumentParser(description="Prepare SynMirror Dataset")
-    parser.add_argument("--input_dir", type=str, default="SynMirror", help="Path to input SynMirror directory")
+    parser.add_argument("--input_dir", type=str, required=True, help="Path to input directory (e.g. SynMirror/abo_v3/0)")
     parser.add_argument("--output_dir", type=str, default="synmirror_dataset", help="Path to output dataset directory")
+    parser.add_argument("--csv_path", type=str, required=True, help="Path to the abo_split_all.csv file")
+    parser.add_argument("--start_idx", type=int, default=0, help="Index to start file naming from (e.g. 0, 1000, etc.)")
+    
     args = parser.parse_args()
 
     # Configuration
-    data_root = Path(args.input_dir)
-    abo_v3_root = data_root / "abo_v3"
-    csv_path = data_root / "abo_split_all.csv"
+    input_dir = Path(args.input_dir)
+    csv_path = Path(args.csv_path)
+    start_idx = args.start_idx
     
     # Output directories
     output_root = Path(args.output_dir)
@@ -59,6 +76,7 @@ def main():
     object_masks_dir = output_root / "object_masks"
     metadata_path = output_root / "metadata.jsonl"
     
+    # Ensure directories exist
     for d in [images_dir, depth_dir, mirror_masks_dir, object_masks_dir]:
         d.mkdir(parents=True, exist_ok=True)
         
@@ -68,45 +86,47 @@ def main():
     
     # Load CSV
     print(f"Loading CSV from {csv_path}...")
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found at {csv_path}")
+        
     df = pd.read_csv(csv_path)
     # Create a dictionary for fast lookup: path -> caption
-    path_to_caption = dict(zip(df['path'], df['caption']))
+    # Normalize paths in CSV to ensure consistency (forward slashes)
+    path_to_caption = dict(zip(df['path'].apply(lambda x: str(x).replace("\\", "/")), df['caption']))
 
     print(f"Loaded {len(path_to_caption)} captions.")
     
     # Traverse directory
-    print(f"Scanning {abo_v3_root} for .hdf5 files...")
-    # Using sorted() for consistent ordering
-    hdf5_files = sorted(list(abo_v3_root.rglob("*.hdf5")))
+    print(f"Scanning {input_dir} for .hdf5 files...")
+    # Using sorted() for consistent ordering within this batch
+    hdf5_files = sorted(list(input_dir.rglob("*.hdf5")))
     
-    print(f"Found {len(hdf5_files)} HDF5 files. Processing...")
+    print(f"Found {len(hdf5_files)} HDF5 files. Processing starting from ID {start_idx+1:05d}...")
     
-    # Open metadata file
-    with open(metadata_path, 'w') as meta_file:
+    # Open metadata file in APPEND mode ('a')
+    with open(metadata_path, 'a') as meta_file:
         for idx, hdf5_path in enumerate(tqdm(hdf5_files)):
             try:
-                # Construct file ID: 00001, 00002, etc. (1-indexed)
-                file_id = f"{idx+1:05d}"
+                # Calculate current file ID based on loop index + start argument
+                current_id = idx + start_idx + 1
+                file_id = f"{current_id:05d}"
                 
-                # Rel path for CSV lookup
-                rel_path = hdf5_path.relative_to(data_root)
-                csv_key = str(rel_path).replace("\\", "/") # Ensure forward slashes for dictionary lookup
+                # 1. Get Caption Key
+                # We need the key to look like "abo_v3/X/Object/0.hdf5" regardless of input_dir
+                csv_key = get_csv_key_from_path(hdf5_path)
                 
-                # 1. Extract Data
+                # 2. Extract Data
                 data = extract_data_from_hdf5(str(hdf5_path))
                 rgb_image = data["image"]
                 mirror_mask = _to_numpy_mask(data["mirror_mask"])
                 object_mask = _to_numpy_mask(data["object_mask"])
                 
-                # 2. Get Caption
-                # Helper: Normalize key if exact match fails (remove 'SynMirror/' if present, or adjust extension)
-                # The csv_key from user context seemed to be 'abo_v3/...' which matches rel_path if data_root is parent of abo_v3
+                # 3. Get Caption
                 caption = path_to_caption.get(csv_key)
                 
                 if caption is None:
-                    # Fallback or skip? Let's use a generic caption if missing, or specific logic.
-                    # Try removing extension .hdf5?
-                    csv_key_no_ext = str(rel_path.with_suffix('')).replace("\\", "/")
+                    # Fallback: Try key without extension
+                    csv_key_no_ext = str(Path(csv_key).with_suffix(''))
                     caption = path_to_caption.get(csv_key_no_ext)
                 
                 if caption is None:
@@ -114,12 +134,12 @@ def main():
                     
                 prompt = f"{caption} in front of a mirror, both the object and its perfect mirror reflection are visible"
                 
-                # 3. Save RGB
+                # 4. Save RGB
                 rgb_filename = f"{file_id}.jpg"
                 rgb_path = images_dir / rgb_filename
                 _save_image(rgb_image, rgb_path)
                 
-                # 4. Save Masks
+                # 5. Save Masks
                 mirror_mask_filename = f"{file_id}.png"
                 mirror_mask_path = mirror_masks_dir / mirror_mask_filename
                 _save_image(mirror_mask, mirror_mask_path, mode="L")
@@ -128,17 +148,12 @@ def main():
                 object_mask_path = object_masks_dir / object_mask_filename
                 _save_image(object_mask, object_mask_path, mode="L")
                 
-                # 5. Extract Depth
-                # Model expects list of images or numpy array
-                # rgb_image is HxWxC uint8
+                # 6. Extract Depth
                 prediction = depth_estimator.extract_depth(rgb_image)
-                depth_map = prediction.depth  # [N, H, W] -> [1, H, W]
-                # Squeeze to [H, W]
-                depth_map = depth_map[0]
+                depth_map = prediction.depth 
+                depth_map = depth_map[0] # Squeeze
                 
                 # Normalize depth for saving (16-bit PNG)
-                # Depth Anything returns relative depth (metric if configured, but usually relative inverse depth)
-                # We normalize min-max to 0-65535 for visibility/storage
                 d_min = depth_map.min()
                 d_max = depth_map.max()
                 
@@ -153,10 +168,9 @@ def main():
                 
                 depth_filename = f"{file_id}.png"
                 depth_path = depth_dir / depth_filename
-                # PIL mode 'I;16' handles 16-bit grayscale
                 Image.fromarray(depth_uint16, mode='I;16').save(depth_path)
                 
-                # 6. Write Metadata
+                # 7. Write Metadata
                 metadata_entry = {
                     "image": f"images/{rgb_filename}",
                     "depth": f"depth/{depth_filename}",
@@ -171,7 +185,7 @@ def main():
                 print(f"Error processing {hdf5_path}: {e}")
                 continue
                 
-    print("Dataset preparation complete.")
+    print(f"Batch complete. Next start_idx should be: {start_idx + len(hdf5_files)}")
 
 if __name__ == "__main__":
     main()
