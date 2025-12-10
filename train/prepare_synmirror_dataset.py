@@ -8,6 +8,7 @@ from tqdm import tqdm
 import torch
 import json
 import sys
+import argparse
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -40,13 +41,18 @@ def _save_image(img_array, path, mode=None):
     img.save(path)
 
 def main():
+    parser = argparse.ArgumentParser(description="Prepare SynMirror Dataset")
+    parser.add_argument("--input_dir", type=str, default="SynMirror", help="Path to input SynMirror directory")
+    parser.add_argument("--output_dir", type=str, default="synmirror_dataset", help="Path to output dataset directory")
+    args = parser.parse_args()
+
     # Configuration
-    data_root = Path("SynMirror")
+    data_root = Path(args.input_dir)
     abo_v3_root = data_root / "abo_v3"
     csv_path = data_root / "abo_split_all.csv"
     
     # Output directories
-    output_root = data_root  # Or a new folder like "SynMirror_Processed"
+    output_root = Path(args.output_dir)
     images_dir = output_root / "images"
     depth_dir = output_root / "depth"
     mirror_masks_dir = output_root / "mirror_masks"
@@ -138,6 +144,8 @@ def main():
                 
                 if d_max - d_min > 1e-8:
                     depth_normalized = (depth_map - d_min) / (d_max - d_min)
+                    # Invert depth: White (1.0) is Near, Black (0.0) is Far
+                    depth_normalized = 1.0 - depth_normalized
                 else:
                     depth_normalized = np.zeros_like(depth_map)
                     
