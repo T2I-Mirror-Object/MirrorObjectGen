@@ -6,7 +6,7 @@ from depth_extraction.pytorch3d_depth_extractor import PyTorch3DDepthExtractor
 import os
 import argparse
 import torch
-from camera_optimization.camera_optimizer import optimize_view
+from camera.camera_optimizer import optimize_view
 
 
 def generate_depth_for_prompt(

@@ -4,7 +4,7 @@ from scene_composition.pytorch3d_scene_composition import SceneComposition
 from edge_extraction.pytorch3d_edge_extractor import PyTorch3DEdgeExtractor
 import os
 import argparse
-from camera_optimization.camera_optimizer import optimize_view
+from camera.camera_optimizer import optimize_view
 
 def generate_edge_for_prompt(
     prompt,
