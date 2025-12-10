@@ -13,7 +13,8 @@ from pytorch3d.renderer import (
     MeshRasterizer, 
     HardPhongShader,
     PointLights,
-    Materials
+    Materials,
+    TexturesVertex
 )
 from pytorch3d.structures import Meshes, join_meshes_as_scene
 
@@ -168,9 +169,11 @@ class PyTorch3DEdgeExtractor(EdgeExtractor):
         
         combined_mesh = join_meshes_as_scene(all_meshes)
         
-        # Assign a default white texture if none exists? 
-        # Shap-E meshes usually have vertex colors. PyTorch3D uses them if textures are None.
-        # We assume combined_mesh has valid textures or vertex colors.
+        # HardPhongShader requires textures. If none exist, create a default white texture.
+        if combined_mesh.textures is None:
+            # Create a white color (1.0, 1.0, 1.0) for every vertex
+            verts_rgb = torch.ones_like(combined_mesh.verts_packed())
+            combined_mesh.textures = TexturesVertex(verts_features=verts_rgb)
         
         # Render RGB image
         images = renderer(combined_mesh) # (N, H, W, 4)

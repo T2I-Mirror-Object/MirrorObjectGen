@@ -68,12 +68,6 @@ def generate_edge_for_prompt(
     print(f"    - {len(scene['objects'])} objects")
     print(f"    - {len(scene['mirror'])} mirror frame")
     print(f"    - {len(scene['reflections'])} reflections")
-    
-    # Optimize Camera View
-    print("\nOptimizing Camera View...")
-    opt_dist, opt_elev, opt_azim = optimize_view(scene, device="cuda")
-    
-    print(f"  ✓ Optimized View: Dist={opt_dist:.2f}, Elev={opt_elev:.2f}, Azim={opt_azim:.2f}")
 
     # Extract edge map from the composed scene
     print("\nExtracting edge map...")
@@ -81,9 +75,9 @@ def generate_edge_for_prompt(
         image_size=(1024, 1024),
         output_dir=f"{output_dir}/edge",
         device="cuda",
-        camera_distance=opt_dist,
-        camera_elevation=opt_elev,
-        camera_azimuth=opt_azim,
+        camera_distance=camera_distance,
+        camera_elevation=camera_elevation,
+        camera_azimuth=camera_azimuth,
         fov=60.0,
         faces_per_pixel=1,
         canny_low_threshold=100,
@@ -94,7 +88,7 @@ def generate_edge_for_prompt(
         scene,
         output_prefix="scene_edge_shap_e",
         object_paths=obj_paths,
-        camera_params=(opt_dist, opt_elev, opt_azim)
+        camera_params=(camera_distance, camera_elevation, camera_azimuth)
     )
     
     print(f"  ✓ Edge map saved to: {edge_map.image_path}")
