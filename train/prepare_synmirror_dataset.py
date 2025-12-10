@@ -149,22 +149,7 @@ def main():
                 _save_image(object_mask, object_mask_path, mode="L")
                 
                 # 6. Extract Depth
-                prediction = depth_estimator.extract_depth(rgb_image)
-                depth_map = prediction.depth 
-                depth_map = depth_map[0] # Squeeze
-                
-                # Normalize depth for saving (16-bit PNG)
-                d_min = depth_map.min()
-                d_max = depth_map.max()
-                
-                if d_max - d_min > 1e-8:
-                    depth_normalized = (depth_map - d_min) / (d_max - d_min)
-                    # Invert depth: White (1.0) is Near, Black (0.0) is Far
-                    depth_normalized = 1.0 - depth_normalized
-                else:
-                    depth_normalized = np.zeros_like(depth_map)
-                    
-                depth_uint16 = (depth_normalized * 65535).astype(np.uint16)
+                depth_uint16 = depth_estimator.extract_depth(rgb_image)
                 
                 depth_filename = f"{file_id}.png"
                 depth_path = depth_dir / depth_filename

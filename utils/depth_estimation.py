@@ -43,11 +43,7 @@ class DepthAnything3Estimator:
             export_format (str): Format to export results ('glb', 'npz', 'ply', 'mini_npz', 'gs_ply', 'gs_video').
         
         Returns:
-            prediction: Object containing depth, conf, extrinsics, intrinsics.
-                        prediction.depth: [N, H, W] float32
-                        prediction.conf: [N, H, W] float32
-                        prediction.extrinsics: [N, 3, 4] float32
-                        prediction.intrinsics: [N, 3, 3] float32
+            depth_uint16: [H, W] uint16 array
         """
         if not isinstance(images, list):
             images = [images]
@@ -59,8 +55,26 @@ class DepthAnything3Estimator:
                 export_dir=export_dir,
                 export_format=export_format
             )
+        
+        depth_map = prediction.depth 
+        depth_map = depth_map[0] # Squeeze
+        
+        # Normalize depth for saving (16-bit PNG)
+        d_min = np.percentile(depth_map, 2)
+        d_max = np.percentile(depth_map, 98)
+
+        depth_map = np.clip(depth_map, d_min, d_max)
+        
+        if d_max - d_min > 1e-8:
+            depth_normalized = (depth_map - d_min) / (d_max - d_min)
+            # Invert depth: White (1.0) is Near, Black (0.0) is Far
+            depth_normalized = 1.0 - depth_normalized
+        else:
+            depth_normalized = np.zeros_like(depth_map)
             
-        return prediction
+        depth_uint16 = (depth_normalized * 65535).astype(np.uint16)
+            
+        return depth_uint16
 
 def get_depth_estimator(model_name="depth-anything/da3mono-large", device=None):
     """Factory function to get a DepthAnything3Estimator instance."""

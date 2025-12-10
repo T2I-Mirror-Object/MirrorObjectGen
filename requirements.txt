@@ -136,7 +136,6 @@ pyparsing==3.2.5
 python-dateutil==2.9.0.post0
 python-multipart==0.0.20
 pytorch-lightning==2.6.0
-pytorch3d @ git+https://github.com/facebookresearch/pytorch3d.git@75ebeeaea0908c5527e7b1e305fbc7681382db47
 pytz==2025.2
 PyYAML==6.0.3
 pyzmq==27.1.0
