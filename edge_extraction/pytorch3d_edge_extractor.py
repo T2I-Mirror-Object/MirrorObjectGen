@@ -173,6 +173,7 @@ class PyTorch3DEdgeExtractor(EdgeExtractor):
         if combined_mesh.textures is None:
             # Create a white color (1.0, 1.0, 1.0) for every vertex
             verts_rgb = torch.ones_like(combined_mesh.verts_packed())
+            verts_rgb = verts_rgb.unsqueeze(0)
             combined_mesh.textures = TexturesVertex(verts_features=verts_rgb)
         
         # Render RGB image
