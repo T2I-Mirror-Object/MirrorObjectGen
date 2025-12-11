@@ -119,8 +119,11 @@ Examples:
   # Test with a single text prompt
   python test_text_to_3d.py --text "a red sports car"
 
-  # Test with multiple text prompts
+  # Test with multiple predefined text prompts
   python test_text_to_3d.py --batch
+
+  # Test with custom batch prompts
+  python test_text_to_3d.py --batch --prompts "a red sports car" "a wooden chair" "a ceramic vase"
 
   # Use different config
   python test_text_to_3d.py --config InstantMesh/configs/instant-mesh-base.yaml --text "a wooden chair"
@@ -146,7 +149,14 @@ Examples:
     parser.add_argument(
         '--batch',
         action='store_true',
-        help='Run batch test with multiple predefined text prompts'
+        help='Run batch test with multiple text prompts'
+    )
+
+    parser.add_argument(
+        '--prompts',
+        type=str,
+        nargs='+',
+        help='List of text prompts for batch processing (use with --batch flag)'
     )
 
     parser.add_argument(
@@ -179,13 +189,17 @@ Examples:
 
     # Run tests based on arguments
     if args.batch:
-        # Predefined test prompts
-        test_texts = [
-            "a red sports car",
-            "a wooden chair",
-            "a ceramic vase with flowers",
-            "a modern lamp",
-        ]
+        # Use provided prompts or fall back to predefined test prompts
+        if args.prompts:
+            test_texts = args.prompts
+        else:
+            # Predefined test prompts
+            test_texts = [
+                "a red sports car",
+                "a wooden chair",
+                "a ceramic vase with flowers",
+                "a modern lamp",
+            ]
         test_multiple_texts(args.config, test_texts, args.output)
 
     elif args.text:
