@@ -70,9 +70,15 @@ class InstantMeshTextTo3D(TextTo3D):
 
         # Initialize InstantMesh diffusion pipeline for multiview generation
         print('Loading InstantMesh diffusion model...')
+        # Use local zero123plus pipeline
+        zero123plus_pipeline_path = os.path.join(
+            os.path.dirname(__file__), '..', 'InstantMesh', 'zero123plus', 'pipeline.py'
+        )
+        zero123plus_pipeline_path = os.path.abspath(zero123plus_pipeline_path)
+
         self.im_pipeline = DiffusionPipeline.from_pretrained(
             "sudo-ai/zero123plus-v1.2",
-            custom_pipeline="zero123plus",
+            custom_pipeline=zero123plus_pipeline_path,
             torch_dtype=torch.float16,
         )
         self.im_pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(
