@@ -157,10 +157,10 @@ def main():
                 
                 # 7. Write Metadata
                 metadata_entry = {
-                    "image": f"images/{rgb_filename}",
-                    "depth": f"depth/{depth_filename}",
-                    "mirror_mask": f"mirror_masks/{mirror_mask_filename}",
-                    "object_mask": f"object_masks/{object_mask_filename}",
+                    "image": f"{args.output_dir}/images/{rgb_filename}",
+                    "depth": f"{args.output_dir}/depth/{depth_filename}",
+                    "mirror_mask": f"{args.output_dir}/mirror_masks/{mirror_mask_filename}",
+                    "object_mask": f"{args.output_dir}/object_masks/{object_mask_filename}",
                     "text": prompt
                 }
                 

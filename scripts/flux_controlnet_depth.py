@@ -69,6 +69,13 @@ parser.add_argument(
     help='Device to use for inference (default: cuda)'
 )
 
+parser.add_argument(
+    '--controlnet-model',
+    type=str,
+    default="Shakker-Labs/FLUX.1-dev-ControlNet-Depth",
+    help='Path to ControlNet model (default: Shakker-Labs/FLUX.1-dev-ControlNet-Depth)'
+)
+
 args = parser.parse_args()
 
 # Create output directory
@@ -80,6 +87,7 @@ print("FLUX.1-ControlNet-Depth Image Generation")
 print("=" * 60)
 print(f"\nPrompt: {args.prompt}")
 print(f"Control Image: {args.control_image}")
+print(f"ControlNet Model: {args.controlnet_model}")
 print(f"Output: {args.output}")
 print(f"Image size: {args.width}x{args.height}")
 print(f"Inference steps: {args.num_inference_steps}")
@@ -95,7 +103,7 @@ print("(This may take a while on first run as the models are downloaded)")
 
 try:
     controlnet = FluxControlNetModel.from_pretrained(
-        "Shakker-Labs/FLUX.1-dev-ControlNet-Depth",
+        args.controlnet_model,
         torch_dtype=torch.bfloat16
     )
     
