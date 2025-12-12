@@ -70,7 +70,7 @@ class PyTorch3DGeometricEdgeExtractor(EdgeExtractor):
 
         # 2. Combine Meshes
         all_meshes = []
-        for key in ['objects', 'mirror', 'reflections', 'floor']:
+        for key in ['objects', 'mirror', 'reflections', 'floor', 'walls']:
             all_meshes.extend(scene.get(key, []))
             
         if not all_meshes:
