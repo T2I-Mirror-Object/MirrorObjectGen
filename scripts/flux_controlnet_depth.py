@@ -23,8 +23,8 @@ parser.add_argument(
 parser.add_argument(
     '--output',
     type=str,
-    default="results/flux_controlnet/output.png",
-    help='Output image path (default: results/flux_controlnet/output.png)'
+    default="results/flux_controlnet/output_depth.png",
+    help='Output image path (default: results/flux_controlnet/output_depth.png)'
 )
 parser.add_argument(
     '--height',
