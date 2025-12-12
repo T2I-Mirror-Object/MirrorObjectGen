@@ -19,7 +19,7 @@ scene = scene_composition.compose_scene([
 # Option 1: Save all components as separate OBJ files
 print("Saving scene components as separate OBJ files...")
 
-all_meshes = scene['objects'] + scene['mirror'] + scene['reflections']
+all_meshes = scene['objects'] + scene['mirror'] + scene['reflections'] + scene['walls']
 
 # Combine all vertices and faces with proper offset
 all_verts = []
@@ -46,3 +46,4 @@ print("\nScene composition complete!")
 print(f"Total objects: {len(scene['objects'])}")
 print(f"Mirror frames: {len(scene['mirror'])}")
 print(f"Reflections: {len(scene['reflections'])}")
+print(f"Walls: {len(scene['walls'])}")

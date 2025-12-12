@@ -23,6 +23,10 @@ class SceneComposition:
         mirror_gap_side: float = 2,
         mirror_gap_top: float = 2,
         mirror_gap_ahead: float = 3,
+        room_width: float = 20.0,
+        room_depth: float = 20.0,
+        wall_height: float = 10.0,
+        wall_thickness: float = 0.5,
         device: str = "cpu"
     ):
         """
@@ -34,6 +38,10 @@ class SceneComposition:
             mirror_gap_side: Horizontal margin on each side of the mirror
             mirror_gap_top: Vertical margin at the top of the mirror
             mirror_gap_ahead: Distance from objects to mirror plane
+            room_width: Width of the room/floor
+            room_depth: Depth of the room/floor
+            wall_height: Height of the walls
+            wall_thickness: Thickness of the walls
             device: Device to use for PyTorch tensors ('cpu' or 'cuda')
         """
         self.gap = gap
@@ -43,6 +51,10 @@ class SceneComposition:
         self.mirror_gap_side = mirror_gap_side
         self.mirror_gap_top = mirror_gap_top
         self.mirror_gap_ahead = mirror_gap_ahead
+        self.room_width = room_width
+        self.room_depth = room_depth
+        self.wall_height = wall_height
+        self.wall_thickness = wall_thickness
         self.device = torch.device(device)
 
     def _load_objects(self, object_paths: List[str]) -> List[Meshes]:
@@ -346,17 +358,76 @@ class SceneComposition:
 
         return mirror_frame, mirror_surface
 
-    def _create_floor(self, width: float = 20.0, depth: float = 20.0, thickness: float = 0.1) -> Meshes:
-        """Create a large rectangular floor."""
-        floor = self._create_box_mesh(width, thickness, depth)
+    def _create_floor(self) -> Meshes:
+        """Create a large rectangular floor based on room dimensions."""
+        floor = self._create_box_mesh(self.room_width, 0.1, self.room_depth)
         
         # Place floor just below y=0
-        # The box is centered at (0, 0, 0) with height `thickness`
-        # To have top surface at y=0, we need to move it to y = -thickness/2
-        translation = torch.tensor([0.0, -thickness/2, 0.0], device=self.device)
+        # The box is centered at (0, 0, 0) with height 0.1
+        # To have top surface at y=0, we need to move it to y = -0.1/2 = -0.05
+        translation = torch.tensor([0.0, -0.05, 0.0], device=self.device)
         floor = self._apply_translation(floor, translation)
         
         return floor
+
+    def _create_walls(self) -> List[Meshes]:
+        """Create 4 walls surrounding the floor."""
+        walls = []
+        
+        # Common wall dimensions
+        # Width/Depth matches room dimensions + thickness to enclose the floor or sit on edge?
+        # Let's make walls sit *outside* the floor area to maximize internal space, or on the edge.
+        # Let's place them such that inner face matches room dimensions.
+        
+        # Left/Right walls: Parallel to Z axis
+        # Dimensions: thickness x height x room_depth
+        lr_wall_depth = self.room_depth + 2 * self.wall_thickness # Extend to cover corners
+        lr_wall = self._create_box_mesh(self.wall_thickness, self.wall_height, lr_wall_depth)
+        
+        # Front/Back walls: Parallel to X axis
+        # Dimensions: room_width x height x thickness
+        fb_wall_width = self.room_width
+        fb_wall = self._create_box_mesh(fb_wall_width, self.wall_height, self.wall_thickness)
+        
+        # Position calculations
+        # Floor is centered at (0, 0, 0)
+        
+        # Left Wall (-X)
+        left_pos = -self.room_width/2 - self.wall_thickness/2
+        left_wall = self._apply_translation(lr_wall, torch.tensor([left_pos, self.wall_height/2 - 0.05, 0], device=self.device)) # Align bottom with floor top (approx) or y=0? Floor top is y=0. Box center y=h/2 puts bottom at 0.
+        walls.append(left_wall)
+        
+        # Right Wall (+X)
+        right_pos = self.room_width/2 + self.wall_thickness/2
+        right_wall = self._apply_translation(lr_wall.clone(), torch.tensor([right_pos, self.wall_height/2 - 0.05, 0], device=self.device))
+        walls.append(right_wall)
+        
+        # Back Wall (+Z) (Behind the mirror which is at -Z? Wait, mirror is at -Z)
+        # Let's check coordinate system.
+        # Objects are at Z=0 (roughly). Mirror is at -mirror_gap_ahead (negative Z).
+        # Camera is usually looking from +Z towards -Z? Or from -Z towards +Z?
+        # PyTorch3D default camera looks at +Z? 
+        # In `_calculate_objects_reflection`:
+        # `reflection_matrix = torch.diag(torch.tensor([1, 1, -1]...` -> Reflects Z. 
+        # `translation = torch.tensor([0, 0, -2 * self.mirror_gap_ahead]` -> Puts reflection behind mirror.
+        # Mirror frame is at `-self.mirror_gap_ahead`.
+        # So Objects ~ 0. Mirror ~ -3. Reflection ~ -6.
+        # Floor is centered at 0.
+        # If room depth is 20, it spans -10 to +10.
+        # So Mirror is inside the room (-3 is between -10 and 10).
+        # We want walls at the boundaries of the floor.
+        
+        # Back Wall (at -Z boundary)
+        back_pos = -self.room_depth/2 - self.wall_thickness/2
+        back_wall = self._apply_translation(fb_wall, torch.tensor([0, self.wall_height/2 - 0.05, back_pos], device=self.device))
+        walls.append(back_wall)
+        
+        # Front Wall (at +Z boundary)
+        front_pos = self.room_depth/2 + self.wall_thickness/2
+        front_wall = self._apply_translation(fb_wall.clone(), torch.tensor([0, self.wall_height/2 - 0.05, front_pos], device=self.device))
+        walls.append(front_wall)
+        
+        return walls
 
     def _calculate_objects_reflection(self, meshes: List[Meshes]) -> List[Meshes]:
         """Create mirror reflections of objects."""
@@ -392,7 +463,9 @@ class SceneComposition:
                 - 'objects': List of original object meshes
                 - 'mirror': List containing the mirror frame mesh
                 - 'reflections': List of reflected object meshes
+                - 'reflections': List of reflected object meshes
                 - 'floor': List containing the floor mesh
+                - 'walls': List containing wall meshes
         """
         # Load and process objects
         objects = self._load_objects(object_paths)
@@ -409,13 +482,18 @@ class SceneComposition:
         # Create floor
         floor = self._create_floor()
 
+        # Create walls
+        walls = self._create_walls()
+
         # Return scene as structured dictionary
         scene = {
             'objects': objects,
             'mirror': [mirror_frame],
             'mirror_surface': [mirror_surface],
             'reflections': reflections,
-            'floor': [floor]
+            'reflections': reflections,
+            'floor': [floor],
+            'walls': walls
         }
 
         return scene

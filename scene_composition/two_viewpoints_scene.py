@@ -18,6 +18,10 @@ class TwoViewpointsScene(SceneComposition):
         mirror_gap_side: float = 2,
         mirror_gap_top: float = 2,
         mirror_gap_ahead: float = 3,
+        room_width: float = 20.0,
+        room_depth: float = 20.0,
+        wall_height: float = 10.0,
+        wall_thickness: float = 0.5,
         device: str = "cpu"
     ):
         super().__init__(
@@ -28,6 +32,10 @@ class TwoViewpointsScene(SceneComposition):
             mirror_gap_side=mirror_gap_side,
             mirror_gap_top=mirror_gap_top,
             mirror_gap_ahead=mirror_gap_ahead,
+            room_width=room_width,
+            room_depth=room_depth,
+            wall_height=wall_height,
+            wall_thickness=wall_thickness,
             device=device
         )
 
