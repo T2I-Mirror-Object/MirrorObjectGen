@@ -3,20 +3,24 @@ import cv2
 import torch
 import os
 import numpy as np
-from depth_anything_v2.dpt import DepthAnythingV2
+import sys
+from PIL import Image
+
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from utils.depth_estimation import get_depth_estimator
 
 def get_args():
-    parser = argparse.ArgumentParser(description='Depth Anything V2 Inference Script')
+    parser = argparse.ArgumentParser(description='Depth Anything V2 Inference Script (Transformers)')
     
     # Input and Output arguments
     parser.add_argument('--input-image', type=str, required=True, help='Path to the input image')
     parser.add_argument('--output-dir', type=str, default='outputs', help='Directory to save results')
     
-    # Model arguments (optional, but good practice to allow changing)
-    parser.add_argument('--checkpoint', type=str, default='checkpoints/depth_anything_v2_vitl.pth', 
-                        help='Path to model checkpoint')
-    parser.add_argument('--encoder', type=str, default='vitl', choices=['vits', 'vitb', 'vitl', 'vitg'],
-                        help='Model encoder type')
+    # Model arguments
+    parser.add_argument('--encoder', type=str, default='vitl', choices=['vits', 'vitb', 'vitl', 'vitg', 'v2'],
+                        help='Model encoder type or "v2" for default')
     
     return parser.parse_args()
 
@@ -24,51 +28,31 @@ def main():
     args = get_args()
 
     # 1. Setup Device
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Running on: {device}")
 
     # 2. Load Model
-    # Map encoder types to their feature/channel configurations
-    model_configs = {
-        'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
-        'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-        'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
-        'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
-    }
-    
-    config = model_configs[args.encoder]
-    model = DepthAnythingV2(**config)
-    
     try:
-        model.load_state_dict(torch.load(args.checkpoint, map_location='cpu'))
-    except FileNotFoundError:
-        print(f"Error: Checkpoint not found at {args.checkpoint}")
+        estimator = get_depth_estimator(model_type=args.encoder, device=device)
+    except Exception as e:
+        print(f"Failed to load estimator: {e}")
         return
-
-    model.to(device).eval()
 
     # 3. Load Image
     if not os.path.exists(args.input_image):
         print(f"Error: Input file {args.input_image} does not exist.")
         return
 
-    raw_img = cv2.imread(args.input_image)
-    if raw_img is None:
-        print("Error: Failed to load image using cv2.")
-        return
-
     print(f"Processing: {args.input_image}...")
-
+    
     # 4. Inference
-    # The model handles resizing internally, but input should be RGB usually, cv2 is BGR
-    # Note: DepthAnything implementation usually handles BGR/RGB, checking source is recommended.
-    # Assuming standard implementation handles it, otherwise: cv2.cvtColor(raw_img, cv2.COLOR_BGR2RGB)
-    depth = model.infer_image(raw_img) # Returns HxW float32 numpy array
+    # Our util handles loading/conversion
+    depth_uint16 = estimator.extract_depth(args.input_image) # HxW uint16
 
     # 5. Post-Processing
     # Normalize depth to 0-255 for visualization
-    # We use min-max normalization to stretch the values across the spectrum
-    depth_normalized = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
+    # uint16 is already 0-65535 normalized (relative depth)
+    depth_normalized = depth_uint16.astype(np.float32) / 65535.0 * 255.0
     depth_uint8 = depth_normalized.astype(np.uint8)
 
     # Generate Colored Heatmap (Inferno is standard for depth)

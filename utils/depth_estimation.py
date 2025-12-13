@@ -78,146 +78,109 @@ class DepthAnything3Estimator:
 
 class DepthAnythingV2Estimator:
     def __init__(self, 
-                 model_type: str = 'vitl', 
-                 checkpoint_path: str = 'checkpoints/depth_anything_v2_vitl.pth', 
+                 model_type: str = 'depth-anything/Depth-Anything-V2-Large-hf', 
                  device: Optional[torch.device] = None):
         """
-        Initialize the Depth Anything V2 estimator.
+        Initialize the Depth Anything V2 estimator using Transformers pipeline.
+        Args:
+            model_type (str): Hugging Face model hub path.
+                              Default: "depth-anything/Depth-Anything-V2-Large-hf"
+                              Legacy 'vitl' etc mapped to HF path if possible, or used as is.
+            device (torch.device, optional): Device to run the model on.
         """
         try:
-            from depth_anything_v2.dpt import DepthAnythingV2
+            from transformers import pipeline
         except ImportError:
-            raise ImportError("Please install depth_anything_v2 to use this feature.")
+            raise ImportError("Please install transformers to use this feature: pip install transformers")
             
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = device
-            
-        print(f"Loading Depth Anything V2 model ({model_type}) on {self.device}...")
-        
-        model_configs = {
-            'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
-            'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-            'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
-            'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
+        # Map legacy short names to HF model IDs if needed, or use default
+        self.model_mapping = {
+            'vits': 'depth-anything/Depth-Anything-V2-Small-hf',
+            'vitb': 'depth-anything/Depth-Anything-V2-Base-hf',
+            'vitl': 'depth-anything/Depth-Anything-V2-Large-hf',
+            'vitg': 'depth-anything/Depth-Anything-V2-Giant-hf' # If available/supported
         }
         
-        if model_type not in model_configs:
-            raise ValueError(f"Unknown model type: {model_type}. available: {list(model_configs.keys())}")
-            
-        self.model = DepthAnythingV2(**model_configs[model_type])
+        hf_model_id = self.model_mapping.get(model_type, model_type)
         
-        if os.path.exists(checkpoint_path):
-            self.model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
-        else:
-            raise FileNotFoundError(f"Checkpoint not found at: {checkpoint_path}")
-            
-        self.model = self.model.to(self.device).eval()
-        print("Model loaded successfully.")
+        device_id = 0 if (device is not None and device.type == 'cuda') or (device is None and torch.cuda.is_available()) else -1
+        
+        print(f"Loading Depth Anything V2 pipeline: {hf_model_id} on device {device_id}...")
+        self.pipe = pipeline(task="depth-estimation", model=hf_model_id, device=device_id)
+        print("Pipeline loaded successfully.")
 
     def extract_depth(self, image: Union[str, np.ndarray, Image.Image]) -> np.ndarray:
         """
         Extract depth map from an image.
         
         Args:
-            image: Image path, numpy array (BGR), or PIL Image.
+            image: Image path, numpy array (BGR/RGB), or PIL Image.
             
         Returns:
             depth_uint16: [H, W] uint16 array
         """
-        # Convert to numpy array (cv2 expects BGR)
+        # Prepare input for pipeline. Pipeline handles str (path) and PIL Image nicely.
+        # If numpy, convert to PIL.
+        
+        pil_image = None
         if isinstance(image, str):
-            raw_img = cv2.imread(image)
-        elif isinstance(image, Image.Image):
-            raw_img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            # Pipeline can handle paths, but let's load it to be consistent with other flows
+            pil_image = Image.open(image).convert("RGB")
         elif isinstance(image, np.ndarray):
-            # Assumes BGR if 3 channels, or Gray if 1
-            if image.ndim == 3 and image.shape[2] == 3:
-                raw_img = image # Assume BGR
-                # If the input was RGB (common in PIL -> np), this might be wrong if not handled.
-                # However, the user prompt code uses cv2.imread which gives BGR.
-                # If the input is from dataset_scripts which uses PIL/extract_hdf5, it might be RGB.
-                # Let's check typical usage.
-            else:
-                raw_img = image
+            # Assume BGR if coming from cv2, or RGB?
+            # Standard utils usually imply BGR from cv2, RGB from PIL.
+            # Let's assume RGB if 3 channels for safety with PIL conversion, 
+            # BUT earlier code handled cv2 BGR.
+            # If input is BGR (common in cv2 workflows), we should convert to RGB.
+            # Let's try to detect or just assume RGB if passed as numpy to this generic util?
+            # Or assume BGR because cv2 is common in this codebase?
+            # The previous V2 implementation I wrote explicitly did cv2.imread (BGR) and passed to model.
+            # Here pipeline expects PIL (RGB).
+            # If the user passes numpy, it's ambiguous.
+            # Let's assume RGB for now as `extract_hdf5` returns RGB.
+            # If it looks like BGR (e.g. from cv2.imread), user usually converts or we should.
+            # `prepare_synmirror_dataset.py` calls `extract_data_from_hdf5` which returns RGB (PIL -> np).
+            # So RGB is the safe bet for `prepare_synmirror_dataset.py`.
+            pil_image = Image.fromarray(image)
+        elif isinstance(image, Image.Image):
+            pil_image = image
         else:
             raise TypeError(f"Unsupported image type: {type(image)}")
             
-        depth = self.model.infer_image(raw_img) # HxW raw depth map
+        # Inference
+        # pipe(image)["depth"] returns a PIL Image object
+        result = self.pipe(pil_image)
+        depth_pil = result["depth"]
         
-        # Normalize depth for saving (16-bit PNG)
-        d_min = depth.min()
-        d_max = depth.max()
-
+        # Convert to numpy
+        depth_map = np.array(depth_pil)
+        
+        # The pipeline output 'depth' is usually already a visualized depth map (uint8?) or raw values?
+        # For "depth-estimation", transformers usually returns the depth map as a PIL Image.
+        # If it's a "depth-anything" model, the output might be raw depth if using model directly,
+        # but pipeline often normalizes for visualization.
+        # Let's inspect the type. If it's floating point, great. If uint8, we are limited.
+        # Usually HF depth pipeline returns PIL Image in mode "L" (8-bit) or "I" (32-bit int) or "F" (32-bit float)?
+        # Documentation says "a PIL Image".
+        # Let's assume we get something reasonable. We need to cast to uint16 0-65535.
+        
+        depth_map = depth_map.astype(np.float32)
+        
+        # Normalize to 0-65535
+        d_min = depth_map.min()
+        d_max = depth_map.max()
+        
         if d_max - d_min > 1e-8:
-            depth_normalized = (depth - d_min) / (d_max - d_min)
-            # Check if inversion is needed. 
-            # Depth Anything V2 output: usually relative depth. 
-            # In V2, closer objects usually have higher values? Or lower?
-            # Metric depth: closer = smaller value. Relative depth (often inverse depth): closer = larger value.
-            # DPV2 paper says "relative depth". usually disparity-like.
-            # Standard 16-bit depth map: usually black=far, white=near (disparity-like) or reversed.
-            # The previous code (DA3) did:
-            # depth_normalized = (depth_map - d_min) / (d_max - d_min)
-            # depth_normalized = 1.0 - depth_normalized (White=Near, Black=Far)
-            
-            # Let's assume prediction is "inverse depth" (like disparity) where higher = closer.
-            # If so, normalizing 0..1 gives 0=far, 1=near.
-            # If we want White=Near, we just keep it as is.
-            # Wait, previous code had `depth_normalized = 1.0 - depth_normalized` with comment "White (1.0) is Near".
-            # This implies original `depth_map` had smaller values for Near ?? 
-            # Or `depth_map` had larger values for Near, and 1-norm reversed it?
-            # Actually, `DepthAnything3.inference` returns metric depth or relative? 
-            # Usually DA models output disparity (close=large).
-            # If close=large, then (val - min)/(max-min) -> close=1.0 (White).
-            # If previous code did `1.0 - ...`, then it flips it so close=0.0 (Black).
-            
-            # Let's stick to standard practice or follow user demo. user demo returns `depth`.
-            # I will follow the same normalization logic as before BUT without the inversion if V2 behaves like V1 (disparity).
-            
-            # Let's assume V2 outputs disparity-like values (High=Close).
-            # If we want standard visualization/saving where uint16 range maps to depth?
-            # Let's default to just normalizing min-max to 0-65535.
-            pass
+            depth_normalized = (depth_map - d_min) / (d_max - d_min)
         else:
-            depth_normalized = np.zeros_like(depth)
-
-        # Re-using logic from DA3 section for consistency
-        # Normalize to 0-1
-        depth_normalized = (depth - d_min) / (d_max - d_min)
-        
-        # Invert? 
-        # "Depth Anything V1" outputs relative depth (inverse depth). High value = Close.
-        # "Depth Anything V2" likely same.
-        # Previous code: 1.0 - depth_normalized.
-        # If input was High=Close -> Normalized High=1.0 -> Inverted Low=0.0. So Close=0.0 (Black).
-        # Typically depth maps are Black=Far (0), White=Near (65535).
-        # OR Black=Close(0), White=Far(65535) (Metric depth in mm).
-        
-        # Let's look at `dataset_scripts/prepare_synmirror_dataset.py` usage.
-        # It just saves it.
-        
-        # I will keep the raw normalization 0..1 -> 0..65535.
-        # If V2 output is disparity (High=Close), then 65535=Close (White).
-        # This matches "White (1.0) is Near".
-        # So I should NOT invert if I want White=Near.
-        # The previous code INVERTED.
-        # (depth - min)/(max - min) -> 0..1 (Far..Near if disparity).
-        # 1 - (Far..Near) -> (Near..Far). i.e. 1=Far, 0=Near.
-        # Comment said: "White (1.0) is Near".
-        # If 1.0 is Near, and we did 1.0 - norm, then norm must be 0.0 for Near.
-        # That means original depth was Low=Near ??
-        
-        # Let's play safe and just return normalized depth 0-65535 based on min/max.
-        # User can adjust if needed.
-        
+            depth_normalized = np.zeros_like(depth_map)
+            
         depth_uint16 = (depth_normalized * 65535).astype(np.uint16)
         return depth_uint16
 
 def get_depth_estimator(model_type="v2", device=None):
     """Factory function to get a Depth Estimator instance."""
-    if model_type == "v2":
-        return DepthAnythingV2Estimator(device=device)
+    if model_type == "v2" or model_type in ['vitl', 'vitb', 'vits', 'vitg']:
+        return DepthAnythingV2Estimator(model_type=model_type, device=device)
     else:
         return DepthAnything3Estimator(device=device)
