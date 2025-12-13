@@ -491,7 +491,6 @@ class SceneComposition:
             'mirror': [mirror_frame],
             'mirror_surface': [mirror_surface],
             'reflections': reflections,
-            'reflections': reflections,
             'floor': [floor],
             'walls': walls
         }

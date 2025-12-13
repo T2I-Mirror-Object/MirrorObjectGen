@@ -142,10 +142,6 @@ class PyTorch3DDepthExtractor(DepthExtractor):
         for mesh in scene.get('floor', []):
             all_meshes.append(mesh)
 
-        # Add walls
-        for mesh in scene.get('walls', []):
-            all_meshes.append(mesh)
-
         # Join all meshes into one scene
         if not all_meshes:
             raise ValueError("Scene contains no meshes")
