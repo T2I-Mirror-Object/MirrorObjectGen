@@ -47,14 +47,12 @@ def main():
     
     # 4. Inference
     # Our util handles loading/conversion
-    depth_uint16 = estimator.extract_depth(args.input_image) # HxW uint16
+    depth_uint8 = estimator.extract_depth(args.input_image) # HxW uint8
 
     # 5. Post-Processing
     # Normalize depth to 0-255 for visualization
-    # uint16 is already 0-65535 normalized (relative depth)
-    depth_normalized = depth_uint16.astype(np.float32) / 65535.0 * 255.0
-    depth_uint8 = depth_normalized.astype(np.uint8)
-
+    # uint8 is already 0-255 normalized
+    
     # Generate Colored Heatmap (Inferno is standard for depth)
     depth_colormap = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_INFERNO)
 

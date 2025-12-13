@@ -173,8 +173,8 @@ def main():
 
                 # 6. Extract Depth if missing
                 if not has_depth:
-                    depth_uint16 = depth_estimator.extract_depth(rgb_image)
-                    Image.fromarray(depth_uint16, mode='I;16').save(depth_path)
+                    depth_uint8 = depth_estimator.extract_depth(rgb_image)
+                    Image.fromarray(depth_uint8, mode='L').save(depth_path)
                     
                 # 7. Extract Canny if missing
                 if not has_canny:

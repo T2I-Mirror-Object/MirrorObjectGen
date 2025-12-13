@@ -117,7 +117,7 @@ class DepthAnythingV2Estimator:
             image: Image path, numpy array (BGR/RGB), or PIL Image.
             
         Returns:
-            depth_uint16: [H, W] uint16 array
+            depth_uint8: [H, W] uint8 array
         """
         # Prepare input for pipeline. Pipeline handles str (path) and PIL Image nicely.
         # If numpy, convert to PIL.
@@ -127,20 +127,7 @@ class DepthAnythingV2Estimator:
             # Pipeline can handle paths, but let's load it to be consistent with other flows
             pil_image = Image.open(image).convert("RGB")
         elif isinstance(image, np.ndarray):
-            # Assume BGR if coming from cv2, or RGB?
-            # Standard utils usually imply BGR from cv2, RGB from PIL.
-            # Let's assume RGB if 3 channels for safety with PIL conversion, 
-            # BUT earlier code handled cv2 BGR.
-            # If input is BGR (common in cv2 workflows), we should convert to RGB.
-            # Let's try to detect or just assume RGB if passed as numpy to this generic util?
-            # Or assume BGR because cv2 is common in this codebase?
-            # The previous V2 implementation I wrote explicitly did cv2.imread (BGR) and passed to model.
-            # Here pipeline expects PIL (RGB).
-            # If the user passes numpy, it's ambiguous.
-            # Let's assume RGB for now as `extract_hdf5` returns RGB.
-            # If it looks like BGR (e.g. from cv2.imread), user usually converts or we should.
-            # `prepare_synmirror_dataset.py` calls `extract_data_from_hdf5` which returns RGB (PIL -> np).
-            # So RGB is the safe bet for `prepare_synmirror_dataset.py`.
+            # Assume RGB if coming from dataset script or PIL compatible source
             pil_image = Image.fromarray(image)
         elif isinstance(image, Image.Image):
             pil_image = image
@@ -155,18 +142,9 @@ class DepthAnythingV2Estimator:
         # Convert to numpy
         depth_map = np.array(depth_pil)
         
-        # The pipeline output 'depth' is usually already a visualized depth map (uint8?) or raw values?
-        # For "depth-estimation", transformers usually returns the depth map as a PIL Image.
-        # If it's a "depth-anything" model, the output might be raw depth if using model directly,
-        # but pipeline often normalizes for visualization.
-        # Let's inspect the type. If it's floating point, great. If uint8, we are limited.
-        # Usually HF depth pipeline returns PIL Image in mode "L" (8-bit) or "I" (32-bit int) or "F" (32-bit float)?
-        # Documentation says "a PIL Image".
-        # Let's assume we get something reasonable. We need to cast to uint16 0-65535.
-        
         depth_map = depth_map.astype(np.float32)
         
-        # Normalize to 0-65535
+        # Normalize to 0-255
         d_min = depth_map.min()
         d_max = depth_map.max()
         
@@ -175,8 +153,8 @@ class DepthAnythingV2Estimator:
         else:
             depth_normalized = np.zeros_like(depth_map)
             
-        depth_uint16 = (depth_normalized * 65535).astype(np.uint16)
-        return depth_uint16
+        depth_uint8 = (depth_normalized * 255).astype(np.uint8)
+        return depth_uint8
 
 def get_depth_estimator(model_type="v2", device=None):
     """Factory function to get a Depth Estimator instance."""
