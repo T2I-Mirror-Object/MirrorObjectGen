@@ -84,7 +84,7 @@ def main():
         
     # Load Depth Anything V2 Model
     print("Initializing Depth Anything V2 Estimator...")
-    depth_estimator = get_depth_estimator(model_type='v2')
+    depth_estimator = get_depth_estimator(model_type='vitl')
     
     # Load CSV
     print(f"Loading CSV from {csv_path}...")
