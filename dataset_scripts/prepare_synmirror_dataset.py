@@ -82,9 +82,9 @@ def main():
     for d in [images_dir, depth_dir, canny_edges_dir, mirror_masks_dir, object_masks_dir]:
         d.mkdir(parents=True, exist_ok=True)
         
-    # Load Depth Anything 3 Model
-    print("Initializing Depth Anything 3 Estimator...")
-    depth_estimator = get_depth_estimator()
+    # Load Depth Anything V2 Model
+    print("Initializing Depth Anything V2 Estimator...")
+    depth_estimator = get_depth_estimator(model_type='v2')
     
     # Load CSV
     print(f"Loading CSV from {csv_path}...")
