@@ -21,12 +21,27 @@ class ShapE(TextTo3D):
             self.diffusion = diffusion
             self.xm = xm
 
-    def __init__(self, seed: int = 42, guidance: float = 10.0, fp16: bool = True, device: str = "cuda", orientation: List[float] = [0.0, 0.0, 0.0]):
+    def __init__(
+        self, 
+        seed: int = 42, 
+        guidance: float = 10.0, 
+        fp16: bool = True, 
+        device: str = "cuda", 
+        orientation: List[float] = [0.0, 0.0, 0.0],
+        karras_steps: int = 64,
+        sigma_min: float = 1e-3,
+        sigma_max: float = 160,
+        s_churn: float = 0
+    ):
         self.seed = seed
         self.guidance = guidance
         self.fp16 = fp16
         self.device = torch.device(device)
         self.orientation = orientation  # [rotation_x, rotation_y, rotation_z] in degrees
+        self.karras_steps = karras_steps
+        self.sigma_min = sigma_min
+        self.sigma_max = sigma_max
+        self.s_churn = s_churn
         self.model: "ShapE.Model" = None
 
     def init_model(self):
@@ -54,10 +69,10 @@ class ShapE(TextTo3D):
             clip_denoised=True,
             use_fp16=self.fp16,
             use_karras=True,
-            karras_steps=64,
-            sigma_min=1e-3,
-            sigma_max=160,
-            s_churn=0,
+            karras_steps=self.karras_steps,
+            sigma_min=self.sigma_min,
+            sigma_max=self.sigma_max,
+            s_churn=self.s_churn,
             device=self.device,
         )
 
@@ -110,10 +125,10 @@ class ShapE(TextTo3D):
             clip_denoised=True,
             use_fp16=self.fp16,
             use_karras=True,
-            karras_steps=64,
-            sigma_min=1e-3,
-            sigma_max=160,
-            s_churn=0,
+            karras_steps=self.karras_steps,
+            sigma_min=self.sigma_min,
+            sigma_max=self.sigma_max,
+            s_churn=self.s_churn,
             device=self.device,
         )
 

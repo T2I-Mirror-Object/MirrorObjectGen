@@ -11,15 +11,25 @@ from camera.camera_optimizer import optimize_view
 def generate_depth_for_prompt(
     prompt,
     output_dir="results",
-    mirror_gap_ahead=3.0
+    mirror_gap_ahead=3.0,
+    guidance_scale=15.0,
+    karras_steps=128,
+    sigma_min=1e-3,
+    sigma_max=160,
+    s_churn=0
 ):
     """
     Generate a depth map for a given text prompt.
     
     Args:
         prompt: Text description of the scene (e.g., "a teddy bear in front of the mirror")
-        output_dir: Base directory for all outputs (default: "results")
-        mirror_gap_ahead: Distance from objects to mirror (default: 3.0)
+        output_dir: Base directory for all outputs
+        mirror_gap_ahead: Distance from objects to mirror
+        guidance_scale: Guidance scale for Shap-E
+        karras_steps: Number of steps for Karras scheduler
+        sigma_min: Minimum sigma for Karras scheduler
+        sigma_max: Maximum sigma for Karras scheduler
+        s_churn: Churn for Karras scheduler
     
     Returns:
         str: Path to the generated depth map image
@@ -35,7 +45,15 @@ def generate_depth_for_prompt(
     obj_name_list = text_parser.parse(prompt)
     
     # Generate 3D objects from text using Shap-E
-    shap_e = ShapE(orientation=[-90.0, 180.0, 0.0])
+    # Generate 3D objects from text using Shap-E
+    shap_e = ShapE(
+        orientation=[-90.0, 180.0, 0.0],
+        guidance=guidance_scale,
+        karras_steps=karras_steps,
+        sigma_min=sigma_min,
+        sigma_max=sigma_max,
+        s_churn=s_churn
+    )
     obj_paths = shap_e.convert_multiple_texts_to_3d(
         texts=obj_name_list,
         output_dir=f"{output_dir}/shap_e"
@@ -137,12 +155,48 @@ if __name__ == "__main__":
         help='Base output directory (default: results)'
     )
     
+    parser.add_argument(
+        '--guidance-scale',
+        type=float,
+        default=15.0,
+        help='Guidance scale for Shap-E (default: 15.0)'
+    )
+    parser.add_argument(
+        '--karras-steps',
+        type=int,
+        default=64,
+        help='Number of steps for Karras scheduler (default: 64)'
+    )
+    parser.add_argument(
+        '--sigma-min',
+        type=float,
+        default=1e-3,
+        help='Minimum sigma for Karras scheduler (default: 1e-3)'
+    )
+    parser.add_argument(
+        '--sigma-max',
+        type=float,
+        default=160,
+        help='Maximum sigma for Karras scheduler (default: 160)'
+    )
+    parser.add_argument(
+        '--s-churn',
+        type=float,
+        default=0,
+        help='Churn for Karras scheduler (default: 0)'
+    )
+    
     args = parser.parse_args()
     
     # Call the main function
     depth_map_path = generate_depth_for_prompt(
         prompt=args.prompt,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        guidance_scale=args.guidance_scale,
+        karras_steps=args.karras_steps,
+        sigma_min=args.sigma_min,
+        sigma_max=args.sigma_max,
+        s_churn=args.s_churn
     )
     
     print(f"\n{'=' * 60}")
