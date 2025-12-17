@@ -1187,7 +1187,7 @@ def main(args):
     for epoch in range(first_epoch, args.num_train_epochs):
         flux_transformer.train()
         for step, batch in enumerate(train_dataloader):
-            print("@@Step: ", step)
+            # print("@@Step: ", step)
             with accelerator.accumulate(flux_transformer):
                 # Convert images to latent space
                 # vae encode
@@ -1264,12 +1264,12 @@ def main(args):
                     pooled_prompt_embeds.zero_()
                 if args.offload:
                     text_encoding_pipeline = text_encoding_pipeline.to("cpu")
-                print("@@Start Training@@")
-                print("text_ids.shape: ", text_ids.shape)
-                print("latent_image_ids.shape: ", latent_image_ids.shape)
-                print("pooled_prompt_embeds.shape: ", pooled_prompt_embeds.shape)
-                print("prompt_embeds.shape: ", prompt_embeds.shape)
-                print("guidance_vec.shape: ", guidance_vec.shape)
+                # print("@@Start Training@@")
+                # print("text_ids.shape: ", text_ids.shape)
+                # print("latent_image_ids.shape: ", latent_image_ids.shape)
+                # print("pooled_prompt_embeds.shape: ", pooled_prompt_embeds.shape)
+                # print("prompt_embeds.shape: ", prompt_embeds.shape)
+                # print("guidance_vec.shape: ", guidance_vec.shape)
                 # Predict.
                 model_pred = flux_transformer(
                     hidden_states=packed_noisy_model_input,
