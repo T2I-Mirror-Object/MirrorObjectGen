@@ -1,3 +1,5 @@
+from camera.interpolation import interpolate_view_params
+import random
 from text_parser.text_parser_impl_2 import TextParserImpl2
 from text_to_3d.shap_e import ShapE
 from scene_composition.pytorch3d_scene_composition import SceneComposition
@@ -9,9 +11,7 @@ from camera.camera_optimizer import optimize_view
 def generate_depth_for_prompt(
     prompt,
     output_dir="results",
-    camera_distance=5.0,
-    camera_elevation=25.0,
-    camera_azimuth=10.0
+    mirror_gap_ahead=3.0
 ):
     """
     Generate a depth map for a given text prompt.
@@ -19,9 +19,7 @@ def generate_depth_for_prompt(
     Args:
         prompt: Text description of the scene (e.g., "a teddy bear in front of the mirror")
         output_dir: Base directory for all outputs (default: "results")
-        camera_distance: Initial guess for distance (default: 5.0)
-        camera_elevation: Initial guess for elevation (default: 25.0)
-        camera_azimuth: Initial guess for azimuth (default: 10.0)
+        mirror_gap_ahead: Distance from objects to mirror (default: 3.0)
     
     Returns:
         str: Path to the generated depth map image
@@ -58,7 +56,7 @@ def generate_depth_for_prompt(
         mirror_thickness=0.1,
         mirror_gap_side=2.0,
         mirror_gap_top=2.0,
-        mirror_gap_ahead=3.0,
+        mirror_gap_ahead=mirror_gap_ahead,
         device="cuda"
     )
     
@@ -69,16 +67,38 @@ def generate_depth_for_prompt(
     print(f"    - {len(scene['mirror'])} mirror frame")
     print(f"    - {len(scene['reflections'])} reflections")
 
+    # Calculate camera components
+    camera_distance = mirror_gap_ahead * 1.5
+    camera_elevation = 25.0
+    camera_azimuth = 0.0
+    
+    # Generate pool of 19 camera poses
+    print("\nGenerating camera pose pool...")
+    start_params = (camera_distance, camera_elevation, camera_azimuth - 20.0)
+    end_params = (camera_distance, camera_elevation, camera_azimuth + 20.0)
+    
+    pose_pool = interpolate_view_params(start_params, end_params, num_steps=19)
+    
+    # Randomly select one pose
+    selected_idx = random.randint(0, len(pose_pool) - 1)
+    selected_pose = pose_pool[selected_idx]
+    
+    print(f"  ✓ Created pool of {len(pose_pool)} poses from {start_params} to {end_params}")
+    print(f"  ✓ Randomly selected pose #{selected_idx}: {selected_pose}")
+    
+    # Update camera parameters with the selected pose
+    dist, elev, azim = selected_pose
+
     # Extract depth map from the composed scene
     print("\nExtracting depth map...")
     extractor = PyTorch3DDepthExtractor(
-        image_size=(1024, 1024),
+        image_size=(512, 512),
         output_dir=f"{output_dir}/depth",
         device="cuda",
         # We can pass defaults here, but we will override in the method call
-        camera_distance=camera_distance,
-        camera_elevation=camera_elevation,
-        camera_azimuth=camera_azimuth,
+        camera_distance=dist,
+        camera_elevation=elev,
+        camera_azimuth=azim,
         fov=60.0,
         faces_per_pixel=1,
         normalize=True,
@@ -90,7 +110,7 @@ def generate_depth_for_prompt(
         scene,
         output_prefix="scene_depth_shap_e",
         object_paths=obj_paths,
-        camera_params=(camera_distance, camera_elevation, camera_azimuth)
+        camera_params=(dist, elev, azim)
     )
     
     print(f"  ✓ Depth map saved to: {depth_map.image_path}")
@@ -111,24 +131,6 @@ if __name__ == "__main__":
         help='Text prompt describing the scene (e.g., "a teddy bear in front of the mirror")'
     )
     parser.add_argument(
-        '--camera-distance',
-        type=float,
-        default=5.0,
-        help='Distance of camera from origin (default: 5.0)'
-    )
-    parser.add_argument(
-        '--camera-elevation',
-        type=float,
-        default=25.0,
-        help='Camera elevation angle in degrees (default: 25.0)'
-    )
-    parser.add_argument(
-        '--camera-azimuth',
-        type=float,
-        default=10.0,
-        help='Camera azimuth angle in degrees (default: 10.0)'
-    )
-    parser.add_argument(
         '--output-dir',
         type=str,
         default="results",
@@ -140,10 +142,7 @@ if __name__ == "__main__":
     # Call the main function
     depth_map_path = generate_depth_for_prompt(
         prompt=args.prompt,
-        output_dir=args.output_dir,
-        camera_distance=args.camera_distance,
-        camera_elevation=args.camera_elevation,
-        camera_azimuth=args.camera_azimuth
+        output_dir=args.output_dir
     )
     
     print(f"\n{'=' * 60}")

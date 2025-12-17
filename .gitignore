@@ -6,6 +6,7 @@ Seg2Any/data
 Seg2Any/result
 
 SynMirror/
+synmirror_dataset/
 
 *.log
 *.pkl
