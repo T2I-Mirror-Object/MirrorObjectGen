@@ -141,7 +141,6 @@ try:
         height=args.height,
         width=args.width,
         num_inference_steps=args.num_inference_steps,
-        num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
         negative_prompt=args.negative_prompt,
         generator=torch.Generator(device=args.device).manual_seed(args.seed),
