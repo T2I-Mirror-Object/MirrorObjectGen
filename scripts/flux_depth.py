@@ -15,6 +15,18 @@ parser.add_argument(
     help='Text prompt for image generation'
 )
 parser.add_argument(
+    '--negative-prompt',
+    type=str,
+    default=None,
+    help='Negative prompt for image generation'
+)
+parser.add_argument(
+    '--model-id',
+    type=str,
+    default="black-forest-labs/FLUX.1-Depth-dev",
+    help='HuggingFace model ID (default: black-forest-labs/FLUX.1-Depth-dev)'
+)
+parser.add_argument(
     '--depth-map',
     type=str,
     default="results/depth/scene_depth.png",
@@ -72,7 +84,10 @@ output_path.parent.mkdir(parents=True, exist_ok=True)
 print("=" * 60)
 print("FLUX.1-Depth-dev Image Generation")
 print("=" * 60)
-print(f"\nPrompt: {args.prompt}")
+print(f"Propmp: {args.prompt}")
+if args.negative_prompt:
+    print(f"Negative prompt: {args.negative_prompt}")
+print(f"Model ID: {args.model_id}")
 print(f"Depth map: {args.depth_map}")
 print(f"Output: {args.output}")
 print(f"Image size: {args.width}x{args.height}")
@@ -88,7 +103,7 @@ print("(This may take a while on first run as the model is downloaded)")
 
 try:
     pipe = FluxControlPipeline.from_pretrained(
-        "black-forest-labs/FLUX.1-Depth-dev",
+        args.model_id,
         torch_dtype=torch.bfloat16
     ).to(args.device)
     print("✓ Model loaded successfully")
@@ -126,7 +141,9 @@ try:
         height=args.height,
         width=args.width,
         num_inference_steps=args.num_inference_steps,
+        num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
+        negative_prompt=args.negative_prompt,
         generator=torch.Generator(device=args.device).manual_seed(args.seed),
     ).images[0]
     
