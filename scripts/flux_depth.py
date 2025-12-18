@@ -18,19 +18,25 @@ parser.add_argument(
     '--model-id',
     type=str,
     default="black-forest-labs/FLUX.1-Depth-dev",
-    help='HuggingFace model ID (default: black-forest-labs/FLUX.1-Depth-dev)'
+    help='HuggingFace model ID'
 )
 parser.add_argument(
     '--depth-map',
     type=str,
     default="results/depth/scene_depth.png",
-    help='Path to depth map image (default: results/depth/scene_depth.png)'
+    help='Path to depth map image'
+)
+parser.add_argument(
+    '--lora-path',
+    type=str,
+    default=None,
+    help='Path to LoRA weights'
 )
 parser.add_argument(
     '--output',
     type=str,
     default="results/flux_depth/output.png",
-    help='Output image path (default: results/flux_depth/output.png)'
+    help='Output image path'
 )
 parser.add_argument(
     '--height',
@@ -47,26 +53,26 @@ parser.add_argument(
 parser.add_argument(
     '--num-inference-steps',
     type=int,
-    default=30,
+    default=28,
     help='Number of inference steps'
 )
 parser.add_argument(
     '--guidance-scale',
     type=float,
-    default=10.0,
-    help='Guidance scale for generation (default: 10.0)'
+    default=3.5,
+    help='Guidance scale for generation'
 )
 parser.add_argument(
     '--seed',
     type=int,
-    default=42,
-    help='Random seed for reproducibility (default: 42)'
+    default=0,
+    help='Random seed for reproducibility'
 )
 parser.add_argument(
     '--device',
     type=str,
     default="cuda",
-    help='Device to use for inference (default: cuda)'
+    help='Device to use for inference'
 )
 
 args = parser.parse_args()
@@ -91,13 +97,14 @@ print()
 
 # Load the pipeline
 print("Loading FLUX.1-Depth-dev model...")
-print("(This may take a while on first run as the model is downloaded)")
 
 try:
     pipe = FluxControlPipeline.from_pretrained(
         args.model_id,
         torch_dtype=torch.bfloat16
     ).to(args.device)
+    if args.lora_path:
+        pipe.load_lora_weights(args.lora_path)
     print("✓ Model loaded successfully")
 except Exception as e:
     print(f"✗ Error loading model: {e}")
@@ -124,7 +131,6 @@ except Exception as e:
 
 # Generate image
 print(f"\nGenerating image...")
-print(f"This may take a few minutes depending on your hardware...")
 
 try:
     image = pipe(
