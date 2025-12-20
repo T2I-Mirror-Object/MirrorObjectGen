@@ -40,7 +40,7 @@ parser.add_argument(
 parser.add_argument(
     '--lora-weight-name',
     type=str,
-    default="ckpts/omini_control/depth.safetensors",
+    default="experimental/depth.safetensors",
     help='LoRA weight filename'
 )
 parser.add_argument(
