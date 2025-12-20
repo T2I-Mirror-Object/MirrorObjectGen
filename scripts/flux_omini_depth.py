@@ -1,13 +1,18 @@
 import os
 import torch
 import argparse
+import sys
 from pathlib import Path
 from PIL import Image
-from diffusers import FluxControlPipeline
-from diffusers.utils import load_image
+from diffusers import FluxPipeline
+
+# Add the parent directory to sys.path to allow importing from utils
+sys.path.append(str(Path(__file__).parent.parent))
+
+from utils.flux_omini import Condition, generate, seed_everything
 
 # Parse command line arguments
-parser = argparse.ArgumentParser(description='Generate images using FLUX.1-Depth-dev model with depth map conditioning')
+parser = argparse.ArgumentParser(description='Generate images using FLUX.1-dev with OminiControl Depth LoRA')
 parser.add_argument(
     '--prompt',
     type=str,
@@ -17,25 +22,37 @@ parser.add_argument(
 parser.add_argument(
     '--model-id',
     type=str,
-    default="black-forest-labs/FLUX.1-Depth-dev",
+    default="black-forest-labs/FLUX.1-dev",
     help='HuggingFace model ID'
 )
 parser.add_argument(
     '--depth-map',
     type=str,
     required=True,
-    help='Path to depth map image'
+    help='Path to input depth map image'
 )
 parser.add_argument(
-    '--lora-path',
+    '--lora-repo',
     type=str,
-    default=None,
-    help='Path to LoRA weights'
+    default="Yuanshi/OminiControl",
+    help='LoRA repository ID'
+)
+parser.add_argument(
+    '--lora-weight-name',
+    type=str,
+    default="ckpts/omini_control/depth.safetensors",
+    help='LoRA weight filename'
+)
+parser.add_argument(
+    '--adapter-name',
+    type=str,
+    default="depth",
+    help='Adapter name'
 )
 parser.add_argument(
     '--output',
     type=str,
-    default="results/flux_depth/output.png",
+    default="results/flux_omini_depth/output.png",
     help='Output image path'
 )
 parser.add_argument(
@@ -82,13 +99,14 @@ output_path = Path(args.output)
 output_path.parent.mkdir(parents=True, exist_ok=True)
 
 print("=" * 60)
-print("Mirror Reflection Image Generation")
+print("Flux OminiControl Depth Generation")
 print("=" * 60)
-print(f"Propmp: {args.prompt}")
+print(f"Prompt: {args.prompt}")
 print(f"Model ID: {args.model_id}")
 print(f"Depth map: {args.depth_map}")
 print(f"Output: {args.output}")
 print(f"Image size: {args.width}x{args.height}")
+print(f"LoRA: {args.lora_repo} / {args.lora_weight_name}")
 print(f"Inference steps: {args.num_inference_steps}")
 print(f"Guidance scale: {args.guidance_scale}")
 print(f"Seed: {args.seed}")
@@ -99,48 +117,61 @@ print()
 print(f"Loading model with id: {args.model_id}...")
 
 try:
-    pipe = FluxControlPipeline.from_pretrained(
+    pipe = FluxPipeline.from_pretrained(
         args.model_id,
         torch_dtype=torch.bfloat16
     ).to(args.device)
-    if args.lora_path:
-        pipe.load_lora_weights(args.lora_path)
-    print("✓ Model loaded successfully")
+    
+    # Unload existing LoRA weights if any (sanity check, though new pipeline shouldn't have any)
+    pipe.unload_lora_weights()
+
+    print(f"Loading LoRA weights from {args.lora_repo}...")
+    pipe.load_lora_weights(
+        args.lora_repo,
+        weight_name=args.lora_weight_name,
+        adapter_name=args.adapter_name,
+    )
+    pipe.set_adapters([args.adapter_name])
+    
+    print("✓ Model and LoRA loaded successfully")
 except Exception as e:
-    print(f"✗ Error loading model: {e}")
-    print("\nNote: You may need to accept the model license at:")
-    print("https://huggingface.co/black-forest-labs/FLUX.1-Depth-dev")
-    print("and login with: huggingface-cli login")
+    print(f"✗ Error loading model or LoRA: {e}")
     exit(1)
 
 # Load depth map
 print(f"\nLoading depth map from: {args.depth_map}")
 try:
     # Load the depth map image
-    depth_image = Image.open(args.depth_map)
+    depth_image = Image.open(args.depth_map).convert("RGB")
     
-    # Convert grayscale depth map to RGB if needed
-    # FLUX.1-Depth-dev expects RGB depth maps
-    if depth_image.mode != 'RGB':
-        depth_image = depth_image.convert('RGB')
+    # Resize to target dimensions
+    if depth_image.size != (args.width, args.height):
+        print(f"Resizing depth map from {depth_image.size} to ({args.width}, {args.height})")
+        depth_image = depth_image.resize((args.width, args.height), Image.Resampling.LANCZOS)
     
-    print(f"✓ Depth map loaded: {depth_image.size} ({depth_image.mode})")
+    print(f"✓ Depth map loaded and processed: {depth_image.size}")
 except Exception as e:
     print(f"✗ Error loading depth map: {e}")
     exit(1)
+
+# Create Condition
+condition = Condition(depth_image, args.adapter_name)
+
+# Set seed
+seed_everything(args.seed)
 
 # Generate image
 print(f"\nGenerating image...")
 
 try:
-    image = pipe(
+    result_img = generate(
+        pipe,
         prompt=args.prompt,
-        control_image=depth_image,
-        height=args.height,
-        width=args.width,
+        conditions=[condition],
         num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
-        generator=torch.Generator(device=args.device).manual_seed(args.seed),
+        height=args.height,
+        width=args.width,
     ).images[0]
     
     print("✓ Image generated successfully")
@@ -151,7 +182,7 @@ except Exception as e:
 # Save the output
 print(f"\nSaving image to: {args.output}")
 try:
-    image.save(args.output)
+    result_img.save(args.output)
     print("✓ Image saved successfully")
 except Exception as e:
     print(f"✗ Error saving image: {e}")
